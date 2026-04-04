@@ -1,0 +1,8 @@
+{
+  "name": "Flowverge",
+  "description": "Industrial-grade solar site control, proof, and automation system for ground-based solar installation.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
