@@ -1,12 +1,52 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, User } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+
+// Add Google Workspace scopes for Sheets and Drive
+googleProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
+googleProvider.addScope('https://www.googleapis.com/auth/drive.file');
+googleProvider.addScope('https://www.googleapis.com/auth/drive.readonly');
+
+let cachedAccessToken: string | null = null;
+let isSigningIn = false;
+
+export const setCachedAccessToken = (token: string | null) => {
+  cachedAccessToken = token;
+};
+
+export const getGoogleAccessToken = (): string | null => {
+  return cachedAccessToken;
+};
+
+export const signInWithGoogleSheets = async (): Promise<{ user: User; accessToken: string } | null> => {
+  try {
+    isSigningIn = true;
+    const result = await signInWithPopup(auth, googleProvider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (!credential?.accessToken) {
+      throw new Error('Failed to obtain Google access token for Sheets');
+    }
+    cachedAccessToken = credential.accessToken;
+    return { user: result.user, accessToken: cachedAccessToken };
+  } catch (error) {
+    console.error('Google Sign-In Error:', error);
+    throw error;
+  } finally {
+    isSigningIn = false;
+  }
+};
+
+onAuthStateChanged(auth, (user) => {
+  if (!user) {
+    cachedAccessToken = null;
+  }
+});
 
 async function testConnection() {
   try {

@@ -183,12 +183,19 @@ export default function Sites() {
         </div>
         {['Admin', 'Project Manager'].includes(user?.role || '') && (
           <div className="flex gap-2">
+            <Link 
+              to="/sheets"
+              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-4 py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all text-sm"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              <span>Google Sheets</span>
+            </Link>
             <button 
               id="bulk-upload-btn"
               onClick={() => setShowBulkModal(true)}
-              className="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-4 py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all"
+              className="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-4 py-2.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all text-sm"
             >
-              <Upload className="w-5 h-5" />
+              <Upload className="w-4 h-4" />
               <span>Bulk Upload</span>
             </button>
             <button 

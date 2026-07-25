@@ -17,6 +17,7 @@ import TeamView from './components/TeamView';
 import ProfileView from './components/ProfileView';
 import SettingsView from './components/SettingsView';
 import WorkflowManager from './components/WorkflowManager';
+import GoogleSheetsSync from './components/GoogleSheetsSync';
 
 const AppRoutes = () => {
   const { user, loading } = useAuth();
@@ -47,6 +48,7 @@ const AppRoutes = () => {
         <Route path="/approvals" element={<ApprovalsView />} />
         <Route path="/ai-brain" element={<AIHelp />} />
         <Route path="/reports" element={<ReportsView />} />
+        <Route path="/sheets" element={<GoogleSheetsSync />} />
         <Route path="/admin" element={<AdminPanel />} />
         <Route path="/team" element={<TeamView />} />
         <Route path="/workflow" element={<WorkflowManager />} />

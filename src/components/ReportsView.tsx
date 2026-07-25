@@ -8,6 +8,7 @@ import {
   Calendar,
   Loader2,
   FileText,
+  FileSpreadsheet,
   Package,
   AlertCircle,
   Shield,
@@ -17,6 +18,7 @@ import {
   CheckCircle2,
   Clock
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { GoogleGenAI } from "@google/genai";
@@ -224,6 +226,13 @@ export default function ReportsView() {
           <p className="text-zinc-500 text-sm mt-1">Operational insights and performance metrics</p>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            to="/sheets"
+            className="flex items-center justify-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-emerald-100 transition-all"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            Google Sheets Hub
+          </Link>
           <button 
             onClick={handleExportCSV}
             className="flex items-center justify-center gap-2 bg-white border border-zinc-200 text-zinc-900 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-zinc-50 transition-all"
