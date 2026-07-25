@@ -1,2 +1,18 @@
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+  }
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .max-w-7xl {
+    max-width: none !important;
+  }
+}

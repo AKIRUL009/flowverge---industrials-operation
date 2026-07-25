@@ -11,7 +11,16 @@ import {
   Filter,
   Loader2,
   Calendar,
-  Activity
+  Activity,
+  MessageCircle,
+  MessageSquare,
+  Globe,
+  Save,
+  ToggleLeft,
+  ToggleRight,
+  ExternalLink,
+  Settings as SettingsIcon,
+  Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
@@ -24,8 +33,10 @@ export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState<Tab>('users');
   const [users, setUsers] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
+  const [integrations, setIntegrations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [saving, setSaving] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -37,6 +48,9 @@ export default function AdminPanel() {
         } else if (activeTab === 'logs') {
           const data = await api.get('/api/admin/logs', token!);
           setLogs(data);
+        } else if (activeTab === 'settings') {
+          const data = await api.get('/api/admin/integrations', token!);
+          setIntegrations(data);
         }
       } catch (err) {
         console.error(err);
@@ -46,6 +60,31 @@ export default function AdminPanel() {
     };
     fetchData();
   }, [activeTab, token]);
+
+  const handleUpdateIntegration = async (id: number, config: any, is_enabled: boolean) => {
+    setSaving(id);
+    try {
+      await api.put(`/api/admin/integrations/${id}`, { config, is_enabled }, token!);
+      // Refresh data
+      const data = await api.get('/api/admin/integrations', token!);
+      setIntegrations(data);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update integration');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const getIntegrationIcon = (name: string) => {
+    switch (name) {
+      case 'WhatsApp': return <MessageCircle className="w-5 h-5 text-emerald-500" />;
+      case 'Teams': return <MessageSquare className="w-5 h-5 text-indigo-500" />;
+      case 'Google Calendar': return <Calendar className="w-5 h-5 text-blue-500" />;
+      case 'External Data': return <Globe className="w-5 h-5 text-amber-500" />;
+      default: return <Zap className="w-5 h-5 text-zinc-500" />;
+    }
+  };
 
   const filteredUsers = users.filter(u => 
     u.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -204,9 +243,88 @@ export default function AdminPanel() {
               </tbody>
             </table>
           ) : (
-            <div className="py-20 flex flex-col items-center justify-center text-zinc-400 gap-3">
-              <Shield className="w-12 h-12 opacity-20" />
-              <span className="text-xs font-bold uppercase tracking-wider">System settings coming soon</span>
+            <div className="p-8">
+              <div className="flex items-center gap-3 mb-8">
+                <div className="w-12 h-12 bg-zinc-900 rounded-2xl flex items-center justify-center text-white">
+                  <SettingsIcon className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-zinc-900">App Integrations</h2>
+                  <p className="text-sm text-zinc-500">Manage external connections and third-party services</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {integrations.map((integration) => (
+                  <div key={integration.id} className="bg-zinc-50 border border-zinc-200 rounded-3xl p-6 hover:shadow-md transition-all group">
+                    <div className="flex items-start justify-between mb-6">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm border border-zinc-100">
+                          {getIntegrationIcon(integration.name)}
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-zinc-900">{integration.name}</h3>
+                          <p className="text-xs text-zinc-500">{integration.description}</p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => handleUpdateIntegration(integration.id, integration.config, !integration.is_enabled)}
+                        className={`p-1 rounded-full transition-all ${integration.is_enabled ? 'text-emerald-500' : 'text-zinc-300'}`}
+                      >
+                        {integration.is_enabled ? <ToggleRight className="w-10 h-10" /> : <ToggleLeft className="w-10 h-10" />}
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {Object.entries(integration.config).map(([key, value]: [string, any]) => (
+                        <div key={key}>
+                          <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1.5 ml-1">
+                            {key.replace(/_/g, ' ')}
+                          </label>
+                          <input 
+                            type={key.includes('key') || key.includes('secret') ? 'password' : 'text'}
+                            value={value}
+                            onChange={(e) => {
+                              const newConfig = { ...integration.config, [key]: e.target.value };
+                              const newIntegrations = integrations.map(i => i.id === integration.id ? { ...i, config: newConfig } : i);
+                              setIntegrations(newIntegrations);
+                            }}
+                            className="w-full px-4 py-2.5 bg-white border border-zinc-200 rounded-xl text-sm focus:ring-2 focus:ring-zinc-900 transition-all"
+                            placeholder={`Enter ${key.replace(/_/g, ' ')}...`}
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-6 flex items-center justify-between pt-6 border-t border-zinc-200">
+                      <div className="text-[10px] text-zinc-400 font-medium">
+                        Last updated: {new Date(integration.updated_at).toLocaleDateString()}
+                      </div>
+                      <button 
+                        onClick={() => handleUpdateIntegration(integration.id, integration.config, integration.is_enabled)}
+                        disabled={saving === integration.id}
+                        className="flex items-center gap-2 bg-zinc-900 text-white px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all disabled:opacity-50"
+                      >
+                        {saving === integration.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                        {saving === integration.id ? 'Saving...' : 'Save Changes'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-12 p-6 bg-blue-50 border border-blue-100 rounded-3xl flex items-start gap-4">
+                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600 shrink-0">
+                  <ExternalLink className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-blue-900 text-sm">Custom API Integration</h4>
+                  <p className="text-xs text-blue-700 mt-1 leading-relaxed">
+                    Need to connect to a custom internal system? Use our "External Data" integration to sync site progress, 
+                    material logs, or safety reports with your existing ERP or project management tools.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </div>

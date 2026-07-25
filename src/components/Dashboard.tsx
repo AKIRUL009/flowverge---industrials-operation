@@ -8,6 +8,7 @@ import {
   Warehouse, 
   BrainCircuit, 
   BarChart3, 
+  ListTodo,
   Settings, 
   Users, 
   User,
@@ -49,7 +50,7 @@ export default function Dashboard({ children }: DashboardProps) {
 
   useEffect(() => {
     if (user) {
-      api.get(`/api/notifications/${user.id}`, token!).then(setNotifications);
+      api.get(`/api/notifications/${user.id}`, token!).then(data => setNotifications(Array.isArray(data) ? data : []));
     }
   }, [user, token]);
 
@@ -61,6 +62,7 @@ export default function Dashboard({ children }: DashboardProps) {
     { name: 'AI Brain', icon: BrainCircuit, path: '/ai-brain', roles: ['Admin', 'Project Manager', 'Supervisor'] },
     { name: 'Reports', icon: BarChart3, path: '/reports', roles: ['Admin', 'Project Manager'] },
     { name: 'System Admin', icon: Settings, path: '/admin', roles: ['Admin'] },
+    { name: 'Workflow', icon: ListTodo, path: '/workflow', roles: ['Admin', 'Project Manager'] },
     { name: 'Team', icon: Users, path: '/team', roles: ['Admin', 'Project Manager'] },
     { name: 'Settings', icon: Settings, path: '/settings', roles: ['Admin'] },
     { name: 'Profile', icon: User, path: '/profile', roles: ['Admin', 'Project Manager', 'Supervisor', 'Warehouse', 'Technician'] },
@@ -90,7 +92,7 @@ export default function Dashboard({ children }: DashboardProps) {
       <aside className={`
         fixed inset-y-0 left-0 z-50 w-64 bg-[#1a1c1e] text-white transition-transform duration-300 ease-in-out
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        lg:relative lg:translate-x-0
+        lg:relative lg:translate-x-0 no-print
       `}>
         <div className="h-full flex flex-col">
           <div className="p-6 flex items-center gap-3 border-b border-white/5">
@@ -135,7 +137,7 @@ export default function Dashboard({ children }: DashboardProps) {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-white border-b border-zinc-200 flex items-center justify-between px-4 lg:px-8 sticky top-0 z-40">
+        <header className="h-16 bg-white border-b border-zinc-200 flex items-center justify-between px-4 lg:px-8 sticky top-0 z-40 no-print">
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="lg:hidden p-2 text-zinc-500 hover:bg-zinc-100 rounded-lg"

@@ -25,7 +25,7 @@ export default function SettingsView() {
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [aiSettings, setAiSettings] = useState({
     apiKey: '',
-    model: 'gemini-2.0-flash',
+    model: 'gemini-3-flash-preview',
     provider: 'google'
   });
   const [showApiKey, setShowApiKey] = useState(false);
@@ -48,7 +48,7 @@ export default function SettingsView() {
         setStages(stagesData);
 
         const aiKey = settingsData.find((s: any) => s.key === 'AI_API_KEY')?.value || '';
-        const aiModel = settingsData.find((s: any) => s.key === 'AI_MODEL')?.value || 'gemini-2.0-flash';
+        const aiModel = settingsData.find((s: any) => s.key === 'AI_MODEL')?.value || 'gemini-3-flash-preview';
         const aiProvider = settingsData.find((s: any) => s.key === 'AI_PROVIDER')?.value || 'google';
         
         setAiSettings({ apiKey: aiKey, model: aiModel, provider: aiProvider });
@@ -234,7 +234,7 @@ export default function SettingsView() {
                   value={aiSettings.model}
                   onChange={(e) => setAiSettings({ ...aiSettings, model: e.target.value })}
                   className="w-full p-3 rounded-xl border border-zinc-200 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 bg-zinc-50"
-                  placeholder="e.ai. gemini-2.0-flash"
+                  placeholder="e.ai. gemini-3-flash-preview"
                 />
               </div>
             </div>

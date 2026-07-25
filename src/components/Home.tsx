@@ -48,11 +48,17 @@ export default function Home() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const sites = await api.get('/api/sites', token!);
-        const approvals = await api.get('/api/approvals', token!);
-        const stock = await api.get('/api/warehouse/stock', token!);
-        const aiCases = await api.get('/api/ai/cases', token!);
-        const stages = await api.get('/api/stages', token!);
+        const sitesRaw = await api.get('/api/sites', token!);
+        const approvalsRaw = await api.get('/api/approvals', token!);
+        const stockRaw = await api.get('/api/warehouse/stock', token!);
+        const aiCasesRaw = await api.get('/api/ai/cases', token!);
+        const stagesRaw = await api.get('/api/stages', token!);
+
+        const sites = Array.isArray(sitesRaw) ? sitesRaw : [];
+        const stages = Array.isArray(stagesRaw) ? stagesRaw : [];
+        const stock = Array.isArray(stockRaw) ? stockRaw : [];
+        const aiCases = Array.isArray(aiCasesRaw) ? aiCasesRaw : [];
+        const approvals = Array.isArray(approvalsRaw) ? approvalsRaw : [];
         
         setRecentSites(sites.slice(0, 5));
         analyzeDelayRisks(sites);
@@ -163,6 +169,9 @@ Return ONLY the JSON array.`
       // 3. Graceful fallback on 429 or other AI errors
       if (err?.status === 429 || err?.message?.includes('429')) {
         console.warn('AI Rate limit hit, using local heuristic fallback');
+        setRiskAlerts(localRisks);
+      } else if (err?.status === 404 || err?.message?.includes('404')) {
+        console.warn('AI Model not found, using local heuristic fallback');
         setRiskAlerts(localRisks);
       }
     } finally {

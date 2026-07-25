@@ -3,19 +3,28 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
-import { db, initializeDatabase } from './src/database.js';
+import { db, initializeDatabase } from './src/database';
+import dotenv from 'dotenv';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+dotenv.config();
+
+const __filename = path.join(process.cwd(), 'server.ts');
+const __dirname = process.cwd();
 
 const app = express();
 const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'flowverge-dev-secret';
 
+if (JWT_SECRET === 'flowverge-dev-secret') {
+  console.log('WARNING: JWT_SECRET is using the fallback value.');
+} else {
+  console.log('JWT_SECRET is loaded from environment.');
+}
+
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 initializeDatabase();
 
@@ -36,12 +45,22 @@ const authenticate = (req: any, res: any, next: any) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: 'No token provided' });
 
-  const token = authHeader.split(' ')[1];
+  const parts = authHeader.split(' ');
+  if (parts.length !== 2 || parts[0] !== 'Bearer') {
+    return res.status(401).json({ error: 'Invalid token format' });
+  }
+
+  const token = parts[1];
+  if (!token || token === 'null' || token === 'undefined') {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;
     next();
-  } catch (err) {
+  } catch (err: any) {
+    console.error('JWT verification failed:', err.message, 'Token length:', token.length);
     res.status(401).json({ error: 'Invalid token' });
   }
 };
@@ -238,7 +257,7 @@ app.post('/api/checklists/response', authenticate, (req: any, res) => {
     // --- STAGE CONDITION ENGINE ---
     if (status === 'Submitted') {
       const mandatoryItems = db.prepare('SELECT id FROM checklist_items WHERE template_id = ? AND is_mandatory = 1').all(template_id);
-      const answeredItems = db.prepare('SELECT item_id FROM checklist_answers WHERE response_id = ? AND answer_value IS NOT NULL AND answer_value != ""').all(responseId);
+      const answeredItems = db.prepare('SELECT item_id FROM checklist_answers WHERE response_id = ? AND answer_value IS NOT NULL AND answer_value != \'\'').all(responseId);
       const answeredIds = new Set(answeredItems.map((a: any) => a.item_id));
       
       const allMandatoryFilled = mandatoryItems.every((item: any) => answeredIds.has(item.id));
@@ -269,14 +288,14 @@ app.post('/api/checklists/response', authenticate, (req: any, res) => {
           }
         } else {
           // For other stages and non-admin users, create approval request
-          const existingApproval = db.prepare('SELECT id FROM approvals WHERE linked_type = "Stage" AND linked_id = ? AND status = "Pending"').get(site_id);
+          const existingApproval = db.prepare('SELECT id FROM approvals WHERE linked_type = \'Stage\' AND linked_id = ? AND status = \'Pending\'').get(site_id);
           
           if (!existingApproval) {
             db.prepare('INSERT INTO approvals (linked_type, linked_id, requested_by, reason) VALUES (?, ?, ?, ?)')
               .run('Stage', site_id, req.user.id, 'System: Checklist completed. Auto-requesting stage advancement.');
             
             // Notify PMs
-            const pms = db.prepare('SELECT u.id FROM users u JOIN roles r ON u.role_id = r.id WHERE r.name = "Project Manager"').all();
+            const pms = db.prepare('SELECT u.id FROM users u JOIN roles r ON u.role_id = r.id WHERE r.name = \'Project Manager\'').all();
             pms.forEach((pm: any) => {
               createNotification(pm.id, `AI Engine: Checklist completed for ${site.name}. Stage advancement suggested.`, 'approval');
             });
@@ -300,7 +319,7 @@ app.post('/api/sites/:id/request-stage-change', authenticate, (req: any, res) =>
     .run('Stage', req.params.id, req.user.id, reason);
   
   // Notify PMs
-  const pms = db.prepare('SELECT id FROM users WHERE role_id = (SELECT id FROM roles WHERE name = "Project Manager")').all();
+  const pms = db.prepare('SELECT id FROM users WHERE role_id = (SELECT id FROM roles WHERE name = \'Project Manager\')').all();
   pms.forEach((pm: any) => {
     createNotification(pm.id, `Stage change request for ${site.name}`, 'approval');
   });
@@ -450,7 +469,7 @@ app.post('/api/ai/solution/:id/approve', authenticate, (req: any, res) => {
     .run(final_solution, req.user.id, req.params.id);
   
   const sol = db.prepare('SELECT problem_id FROM ai_solutions WHERE id = ?').get(req.params.id);
-  db.prepare('UPDATE ai_problems SET status = "Solved" WHERE id = ?').run(sol.problem_id);
+  db.prepare('UPDATE ai_problems SET status = \'Solved\' WHERE id = ?').run(sol.problem_id);
   
   const prob = db.prepare('SELECT reported_by FROM ai_problems WHERE id = ?').get(sol.problem_id);
   createNotification(prob.reported_by, 'Your AI problem has been solved', 'ai');
@@ -580,7 +599,7 @@ app.post('/api/safety/log', authenticate, (req: any, res) => {
     .run(site_id, req.user.id, category, description, severity, photo_proof);
   
   if (severity === 'High' || severity === 'Critical') {
-    const pms = db.prepare('SELECT id FROM users WHERE role_id = (SELECT id FROM roles WHERE name = "Project Manager")').all();
+    const pms = db.prepare('SELECT id FROM users WHERE role_id = (SELECT id FROM roles WHERE name = \'Project Manager\')').all();
     pms.forEach((pm: any) => {
       createNotification(pm.id, `URGENT Safety Issue: ${category} at site ${site_id}`, 'general');
     });
@@ -641,11 +660,107 @@ app.get('/api/reports/ai-weekly', authenticate, (req, res) => {
   res.json(reports);
 });
 
+// Middleware: Check Role
+const checkRole = (roles: string[]) => (req: any, res: any, next: any) => {
+  if (!roles.includes(req.user.role)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  next();
+};
+
+// --- ADMIN WORKFLOW ROUTES ---
+app.post('/api/admin/stages', authenticate, checkRole(['Admin', 'Project Manager']), (req: any, res) => {
+  const { name, sequence_order, max_allowed_days, working_principle, necessary_functions } = req.body;
+  const result = db.prepare('INSERT INTO stages (name, sequence_order, max_allowed_days, working_principle, necessary_functions) VALUES (?, ?, ?, ?, ?)')
+    .run(name, sequence_order, max_allowed_days, working_principle, necessary_functions);
+  logAction(req.user.id, 'Create Stage', `Created stage ${name}`, null);
+  res.json({ id: result.lastInsertRowid });
+});
+
+app.put('/api/admin/stages/:id', authenticate, checkRole(['Admin', 'Project Manager']), (req: any, res) => {
+  const { name, sequence_order, max_allowed_days, working_principle, necessary_functions } = req.body;
+  db.prepare('UPDATE stages SET name = ?, sequence_order = ?, max_allowed_days = ?, working_principle = ?, necessary_functions = ? WHERE id = ?')
+    .run(name, sequence_order, max_allowed_days, working_principle, necessary_functions, req.params.id);
+  logAction(req.user.id, 'Update Stage', `Updated stage ${name}`, null);
+  res.json({ success: true });
+});
+
+app.delete('/api/admin/stages/:id', authenticate, checkRole(['Admin', 'Project Manager']), (req: any, res) => {
+  db.prepare('DELETE FROM stages WHERE id = ?').run(req.params.id);
+  logAction(req.user.id, 'Delete Stage', `Deleted stage ID ${req.params.id}`, null);
+  res.json({ success: true });
+});
+
+app.get('/api/admin/checklists', authenticate, checkRole(['Admin', 'Project Manager']), (req, res) => {
+  const templates = db.prepare(`
+    SELECT ct.*, st.name as stage_name 
+    FROM checklist_templates ct
+    JOIN stages st ON ct.stage_id = st.id
+  `).all();
+  res.json(templates);
+});
+
+app.post('/api/admin/checklists', authenticate, checkRole(['Admin', 'Project Manager']), (req: any, res) => {
+  const { stage_id, name } = req.body;
+  const result = db.prepare('INSERT INTO checklist_templates (stage_id, name) VALUES (?, ?)')
+    .run(stage_id, name);
+  logAction(req.user.id, 'Create Checklist Template', `Created template ${name}`, null);
+  res.json({ id: result.lastInsertRowid });
+});
+
+app.put('/api/admin/checklists/:id', authenticate, checkRole(['Admin', 'Project Manager']), (req: any, res) => {
+  const { stage_id, name, is_active } = req.body;
+  db.prepare('UPDATE checklist_templates SET stage_id = ?, name = ?, is_active = ? WHERE id = ?')
+    .run(stage_id, name, is_active, req.params.id);
+  logAction(req.user.id, 'Update Checklist Template', `Updated template ${name}`, null);
+  res.json({ success: true });
+});
+
+app.get('/api/admin/checklists/:id/items', authenticate, checkRole(['Admin', 'Project Manager']), (req, res) => {
+  const items = db.prepare('SELECT * FROM checklist_items WHERE template_id = ? ORDER BY order_no').all(req.params.id);
+  res.json(items);
+});
+
+app.post('/api/admin/checklists/:id/items', authenticate, checkRole(['Admin', 'Project Manager']), (req: any, res) => {
+  const { question_text, answer_type, is_mandatory, requires_photo, order_no } = req.body;
+  const result = db.prepare('INSERT INTO checklist_items (template_id, question_text, answer_type, is_mandatory, requires_photo, order_no) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(req.params.id, question_text, answer_type, is_mandatory ? 1 : 0, requires_photo ? 1 : 0, order_no);
+  res.json({ id: result.lastInsertRowid });
+});
+
+app.put('/api/admin/checklists/items/:id', authenticate, checkRole(['Admin', 'Project Manager']), (req: any, res) => {
+  const { question_text, answer_type, is_mandatory, requires_photo, order_no } = req.body;
+  db.prepare('UPDATE checklist_items SET question_text = ?, answer_type = ?, is_mandatory = ?, requires_photo = ?, order_no = ? WHERE id = ?')
+    .run(question_text, answer_type, is_mandatory ? 1 : 0, requires_photo ? 1 : 0, order_no, req.params.id);
+  res.json({ success: true });
+});
+
+app.delete('/api/admin/checklists/items/:id', authenticate, checkRole(['Admin', 'Project Manager']), (req: any, res) => {
+  db.prepare('DELETE FROM checklist_items WHERE id = ?').run(req.params.id);
+  res.json({ success: true });
+});
+
+// --- INTEGRATION ROUTES ---
+app.get('/api/admin/integrations', authenticate, checkRole(['Admin']), (req, res) => {
+  const integrations = db.prepare('SELECT * FROM integrations').all();
+  res.json(integrations.map((i: any) => ({ ...i, config: JSON.parse(i.config) })));
+});
+
+app.put('/api/admin/integrations/:id', authenticate, checkRole(['Admin']), (req: any, res) => {
+  const { config, is_enabled } = req.body;
+  db.prepare('UPDATE integrations SET config = ?, is_enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(JSON.stringify(config), is_enabled ? 1 : 0, req.params.id);
+  
+  const integration = db.prepare('SELECT name FROM integrations WHERE id = ?').get(req.params.id);
+  logAction(req.user.id, 'Update Integration', `Updated ${integration.name} integration settings`, null);
+  res.json({ success: true });
+});
+
 // --- VITE MIDDLEWARE ---
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -662,4 +777,6 @@ async function startServer() {
   });
 }
 
-startServer();
+startServer().catch((err) => {
+  console.error('Failed to start server:', err);
+});

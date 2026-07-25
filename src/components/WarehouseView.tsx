@@ -43,8 +43,8 @@ export default function WarehouseView() {
           api.get('/api/warehouse/stock', token!),
           api.get('/api/sites', token!)
         ]);
-        setStock(stockData);
-        setSites(sitesData);
+        setStock(Array.isArray(stockData) ? stockData : []);
+        setSites(Array.isArray(sitesData) ? sitesData : []);
       } catch (err) {
         console.error(err);
       } finally {
@@ -77,7 +77,7 @@ export default function WarehouseView() {
       
       // Refresh stock
       const newStock = await api.get('/api/warehouse/stock', token!);
-      setStock(newStock);
+      setStock(Array.isArray(newStock) ? newStock : []);
       setShowModal(null);
       setFormData({ material_id: '', quantity: '', site_id: '', remarks: '', photo_proof: '' });
     } catch (err: any) {

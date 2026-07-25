@@ -30,7 +30,9 @@ export function initializeDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT,
       sequence_order INTEGER,
-      max_allowed_days INTEGER
+      max_allowed_days INTEGER,
+      working_principle TEXT,
+      necessary_functions TEXT
     );
 
     CREATE TABLE IF NOT EXISTS sites (
@@ -61,6 +63,8 @@ export function initializeDatabase() {
   try { db.exec('ALTER TABLE sites ADD COLUMN site_custom_id TEXT'); } catch (e) {}
   try { db.exec('ALTER TABLE sites ADD COLUMN district TEXT'); } catch (e) {}
   try { db.exec('ALTER TABLE sites ADD COLUMN client_site_id TEXT'); } catch (e) {}
+  try { db.exec('ALTER TABLE stages ADD COLUMN working_principle TEXT'); } catch (e) {}
+  try { db.exec('ALTER TABLE stages ADD COLUMN necessary_functions TEXT'); } catch (e) {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS stage_history (
@@ -265,6 +269,15 @@ export function initializeDatabase() {
       summary TEXT,
       generated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS integrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE,
+      config TEXT,
+      is_enabled INTEGER DEFAULT 0,
+      description TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Seed Roles
@@ -293,32 +306,51 @@ export function initializeDatabase() {
     const insertUser = db.prepare('INSERT INTO users (full_name, email, password_hash, role_id) VALUES (?, ?, ?, ?)');
     const salt = bcrypt.genSaltSync(10);
     
-    insertUser.run('Admin User', 'admin@flowverge.com', bcrypt.hashSync('admin123', salt), 1);
-    insertUser.run('PM User', 'pm@flowverge.com', bcrypt.hashSync('pm123', salt), 2);
-    insertUser.run('Supervisor User', 'sup@flowverge.com', bcrypt.hashSync('sup123', salt), 3);
-    insertUser.run('Warehouse User', 'wh@flowverge.com', bcrypt.hashSync('wh123', salt), 4);
-    insertUser.run('Vendor User', 'vendor@flowverge.com', bcrypt.hashSync('vendor123', salt), 5);
+    // Get role IDs dynamically
+    const getRoleId = (roleName: string) => {
+      const row = db.prepare('SELECT id FROM roles WHERE name = ?').get(roleName) as { id: number } | undefined;
+      return row ? row.id : null;
+    };
+
+    insertUser.run('Admin User', 'admin@flowverge.com', bcrypt.hashSync('admin123', salt), getRoleId('Admin') || 1);
+    insertUser.run('PM User', 'pm@flowverge.com', bcrypt.hashSync('pm123', salt), getRoleId('Project Manager') || 2);
+    insertUser.run('Supervisor User', 'sup@flowverge.com', bcrypt.hashSync('sup123', salt), getRoleId('Supervisor') || 3);
+    insertUser.run('Warehouse User', 'wh@flowverge.com', bcrypt.hashSync('wh123', salt), getRoleId('Warehouse') || 4);
+    insertUser.run('Vendor User', 'vendor@flowverge.com', bcrypt.hashSync('vendor123', salt), getRoleId('Vendor') || 5);
   }
 
   // Seed Demo Site
   const sitesCount = db.prepare('SELECT count(*) as count FROM sites').get().count;
   if (sitesCount === 0) {
-    const insertSite = db.prepare(`
-      INSERT INTO sites (
-        project_id, site_custom_id, name, district, client, client_site_id, 
-        location, current_stage_id, supervisor_id, vendor_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    insertSite.run(
-      'PRJ-DEMO-01', 
-      'SITE-DEMO-01', 
-      'Ibrahimpura Indus', 
-      'Indore', 
-      'Hyperqom Infra', 
-      'C-SITE-124', 
-      'IN-1247746', 
-      1, 3, 5
-    );
+    const stageRow = db.prepare('SELECT id FROM stages ORDER BY sequence_order LIMIT 1').get() as { id: number } | undefined;
+    const supUser = db.prepare("SELECT id FROM users WHERE email = 'sup@flowverge.com'").get() as { id: number } | undefined;
+    const vendorUser = db.prepare("SELECT id FROM users WHERE email = 'vendor@flowverge.com'").get() as { id: number } | undefined;
+    const anyUser = db.prepare("SELECT id FROM users LIMIT 1").get() as { id: number } | undefined;
+
+    const currentStageId = stageRow ? stageRow.id : 1;
+    const supervisorId = supUser ? supUser.id : (anyUser ? anyUser.id : null);
+    const vendorId = vendorUser ? vendorUser.id : (anyUser ? anyUser.id : null);
+
+    try {
+      const insertSite = db.prepare(`
+        INSERT INTO sites (
+          project_id, site_custom_id, name, district, client, client_site_id, 
+          location, current_stage_id, supervisor_id, vendor_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      insertSite.run(
+        'PRJ-DEMO-01', 
+        'SITE-DEMO-01', 
+        'Ibrahimpura Indus', 
+        'Indore', 
+        'Hyperqom Infra', 
+        'C-SITE-124', 
+        'IN-1247746', 
+        currentStageId, supervisorId, vendorId
+      );
+    } catch (e) {
+      console.error('Failed to seed demo site:', e);
+    }
   }
 
   // Seed Materials
@@ -341,6 +373,16 @@ export function initializeDatabase() {
     insertItem.run(templateId, 'Soil test report attached?', 'Yes/No', 2);
     insertItem.run(templateId, 'Number of panels planned', 'Number', 3);
     insertItem.run(templateId, 'Site photo - North view', 'Photo', 4);
+  }
+
+  // Seed Integrations
+  const integrationsCount = db.prepare('SELECT count(*) as count FROM integrations').get().count;
+  if (integrationsCount === 0) {
+    const insertIntegration = db.prepare('INSERT INTO integrations (name, description, config, is_enabled) VALUES (?, ?, ?, ?)');
+    insertIntegration.run('WhatsApp', 'WhatsApp Business API for notifications', JSON.stringify({ webhook_url: '', api_key: '' }), 0);
+    insertIntegration.run('Teams', 'Microsoft Teams Webhook for alerts', JSON.stringify({ webhook_url: '' }), 0);
+    insertIntegration.run('Google Calendar', 'Calendar integration for meeting scheduling', JSON.stringify({ client_id: '', client_secret: '' }), 0);
+    insertIntegration.run('External Data', 'Generic API integration for external data syncing', JSON.stringify({ endpoint: '', auth_token: '' }), 0);
   }
 }
 

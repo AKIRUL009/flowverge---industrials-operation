@@ -49,7 +49,7 @@ export default function ReportsView() {
     try {
       setLoading(true);
       setError(null);
-      const [sites, stock, aiCases, safetyLogs, vendors, warehouseEfficiency, aiWeekly] = await Promise.all([
+      const [sitesRaw, stockRaw, aiCasesRaw, safetyLogsRaw, vendorsRaw, warehouseEfficiencyRaw, aiWeeklyRaw] = await Promise.all([
         api.get('/api/sites', token!),
         api.get('/api/warehouse/stock', token!),
         api.get('/api/ai/cases', token!),
@@ -58,6 +58,14 @@ export default function ReportsView() {
         api.get('/api/reports/warehouse/efficiency', token!),
         api.get('/api/reports/ai-weekly', token!)
       ]);
+
+      const sites = Array.isArray(sitesRaw) ? sitesRaw : [];
+      const stock = Array.isArray(stockRaw) ? stockRaw : [];
+      const aiCases = Array.isArray(aiCasesRaw) ? aiCasesRaw : [];
+      const safetyLogs = Array.isArray(safetyLogsRaw) ? safetyLogsRaw : [];
+      const vendors = Array.isArray(vendorsRaw) ? vendorsRaw : [];
+      const warehouseEfficiency = Array.isArray(warehouseEfficiencyRaw) ? warehouseEfficiencyRaw : [];
+      const aiWeekly = Array.isArray(aiWeeklyRaw) ? aiWeeklyRaw : [];
 
       // Aggregate site stages
       const stageCounts = sites.reduce((acc: any, site: any) => {
@@ -151,6 +159,35 @@ export default function ReportsView() {
     }
   };
 
+  const handleExportPDF = () => {
+    window.print();
+  };
+
+  const handleExportCSV = () => {
+    if (!data) return;
+    
+    // Export Site Stage Distribution
+    const stageHeaders = ['Stage Name', 'Count'];
+    const stageRows = data.stageData.map((s: any) => `${s.name},${s.value}`);
+    const stageCSV = [stageHeaders.join(','), ...stageRows].join('\n');
+
+    // Export Inventory
+    const stockHeaders = ['Material', 'Current Stock', 'Min Required'];
+    const stockRows = data.stockData.map((s: any) => `${s.name},${s.stock},${s.min}`);
+    const stockCSV = [stockHeaders.join(','), ...stockRows].join('\n');
+
+    const fullCSV = `SITE STAGE DISTRIBUTION\n${stageCSV}\n\nINVENTORY STATUS\n${stockCSV}`;
+    const blob = new Blob([fullCSV], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `flowverge_report_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
   if (loading) {
@@ -186,10 +223,22 @@ export default function ReportsView() {
           <h1 className="text-3xl font-bold text-zinc-900 tracking-tight">Analytics & Reports</h1>
           <p className="text-zinc-500 text-sm mt-1">Operational insights and performance metrics</p>
         </div>
-        <button className="flex items-center justify-center gap-2 bg-zinc-900 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-zinc-800 transition-all">
-          <Download className="w-4 h-4" />
-          Export PDF
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={handleExportCSV}
+            className="flex items-center justify-center gap-2 bg-white border border-zinc-200 text-zinc-900 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-zinc-50 transition-all"
+          >
+            <Download className="w-4 h-4" />
+            Export CSV
+          </button>
+          <button 
+            onClick={handleExportPDF}
+            className="flex items-center justify-center gap-2 bg-zinc-900 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-zinc-800 transition-all"
+          >
+            <FileText className="w-4 h-4" />
+            Export PDF
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

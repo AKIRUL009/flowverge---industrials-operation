@@ -34,6 +34,9 @@ export default function SiteDetail() {
   const [materials, setMaterials] = useState<any[]>([]);
   const [safetyLogs, setSafetyLogs] = useState<any[]>([]);
   const [showSafetyModal, setShowSafetyModal] = useState(false);
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [requestReason, setRequestReason] = useState('');
+  const [requesting, setRequesting] = useState(false);
   const [safetyForm, setSafetyForm] = useState({
     category: 'PPE',
     severity: 'Low',
@@ -80,6 +83,23 @@ export default function SiteDetail() {
       fetchData();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleRequestStageChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!requestReason.trim()) return;
+    
+    setRequesting(true);
+    try {
+      await api.post(`/api/sites/${id}/request-stage-change`, { reason: requestReason }, token!);
+      setShowRequestModal(false);
+      setRequestReason('');
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRequesting(false);
     }
   };
 
@@ -248,6 +268,16 @@ export default function SiteDetail() {
                         <div className="flex items-center gap-3">
                           <Package className="w-4 h-4 text-orange-500" />
                           Material Requests
+                        </div>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => setShowRequestModal(true)}
+                        className="w-full flex items-center justify-between p-3 hover:bg-zinc-50 rounded-xl transition-all text-sm font-medium text-zinc-600"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Clock className="w-4 h-4 text-amber-500" />
+                          Request Stage Change
                         </div>
                         <ChevronRight className="w-4 h-4" />
                       </button>
@@ -611,6 +641,67 @@ export default function SiteDetail() {
                       className="flex-1 py-3 bg-zinc-900 text-white rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-200"
                     >
                       Submit Log
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Request Stage Change Modal */}
+      <AnimatePresence>
+        {showRequestModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-[2rem] w-full max-w-lg overflow-hidden shadow-2xl"
+            >
+              <div className="p-8">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-bold text-zinc-900">Request Stage Change</h3>
+                  <button onClick={() => setShowRequestModal(false)} className="p-2 hover:bg-zinc-100 rounded-xl transition-all">
+                    <X className="w-5 h-5 text-zinc-400" />
+                  </button>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl mb-6 flex gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                  <p className="text-xs text-amber-700 leading-relaxed">
+                    This will notify the Project Manager for manual review. Please provide a clear reason for the stage advancement.
+                  </p>
+                </div>
+
+                <form onSubmit={handleRequestStageChange} className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Reason for Request</label>
+                    <textarea 
+                      required
+                      value={requestReason}
+                      onChange={(e) => setRequestReason(e.target.value)}
+                      className="w-full p-3 rounded-xl border border-zinc-200 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900 min-h-[120px]"
+                      placeholder="e.g. All field work completed, waiting for final inspection..."
+                    />
+                  </div>
+
+                  <div className="flex gap-4 pt-4">
+                    <button 
+                      type="button"
+                      onClick={() => setShowRequestModal(false)}
+                      className="flex-1 py-3 border border-zinc-200 text-zinc-600 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-zinc-50 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      type="submit"
+                      disabled={requesting || !requestReason.trim()}
+                      className="flex-1 py-3 bg-zinc-900 text-white rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {requesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                      Submit Request
                     </button>
                   </div>
                 </form>

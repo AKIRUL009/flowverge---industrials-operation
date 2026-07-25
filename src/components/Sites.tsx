@@ -69,9 +69,13 @@ export default function Sites() {
           api.get('/api/sites', token!),
           api.get('/api/admin/users', token!)
         ]);
-        setSites(sitesData);
-        setSupervisors(usersData.filter((u: any) => u.role === 'Supervisor'));
-        setVendors(usersData.filter((u: any) => u.role === 'Vendor'));
+        
+        const sitesList = Array.isArray(sitesData) ? sitesData : [];
+        const usersList = Array.isArray(usersData) ? usersData : [];
+
+        setSites(sitesList);
+        setSupervisors(usersList.filter((u: any) => u.role === 'Supervisor'));
+        setVendors(usersList.filter((u: any) => u.role === 'Vendor'));
       } catch (err) {
         console.error(err);
       } finally {
@@ -150,7 +154,7 @@ export default function Sites() {
 
           await api.post('/api/sites/bulk', mappedData, token!);
           const data = await api.get('/api/sites', token!);
-          setSites(data);
+          setSites(Array.isArray(data) ? data : []);
           setShowBulkModal(false);
           alert(`Successfully uploaded ${mappedData.length} sites`);
         } catch (err) {

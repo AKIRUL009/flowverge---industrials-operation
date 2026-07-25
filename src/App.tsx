@@ -16,6 +16,7 @@ import ReportsView from './components/ReportsView';
 import TeamView from './components/TeamView';
 import ProfileView from './components/ProfileView';
 import SettingsView from './components/SettingsView';
+import WorkflowManager from './components/WorkflowManager';
 
 const AppRoutes = () => {
   const { user, loading } = useAuth();
@@ -48,6 +49,7 @@ const AppRoutes = () => {
         <Route path="/reports" element={<ReportsView />} />
         <Route path="/admin" element={<AdminPanel />} />
         <Route path="/team" element={<TeamView />} />
+        <Route path="/workflow" element={<WorkflowManager />} />
         <Route path="/profile" element={<ProfileView />} />
         <Route path="/settings" element={<SettingsView />} />
         <Route path="*" element={<Navigate to="/" />} />

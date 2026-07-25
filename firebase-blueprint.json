@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User account and profile in FlowVerge",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "fullName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 100 },
+        "role": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["uid", "fullName", "email", "role"]
+    },
+    "Site": {
+      "title": "Site",
+      "description": "Telecom or construction project site",
+      "type": "object",
+      "properties": {
+        "siteCustomId": { "type": "string", "maxLength": 50 },
+        "name": { "type": "string", "maxLength": 100 },
+        "district": { "type": "string", "maxLength": 100 },
+        "client": { "type": "string", "maxLength": 100 },
+        "clientSiteId": { "type": "string", "maxLength": 50 },
+        "location": { "type": "string", "maxLength": 100 },
+        "currentStageId": { "type": "number" },
+        "supervisorId": { "type": "string", "maxLength": 128 },
+        "vendorId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["siteCustomId", "name", "district", "client"]
+    },
+    "ChecklistSubmission": {
+      "title": "ChecklistSubmission",
+      "description": "Inspection or stage checklist submission",
+      "type": "object",
+      "properties": {
+        "siteId": { "type": "string", "maxLength": 128 },
+        "stageId": { "type": "number" },
+        "submittedBy": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["siteId", "submittedBy", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Collection of user accounts"
+    },
+    "/sites/{siteId}": {
+      "schema": { "$ref": "#/entities/Site" },
+      "description": "Collection of project sites"
+    },
+    "/checklists/{checklistId}": {
+      "schema": { "$ref": "#/entities/ChecklistSubmission" },
+      "description": "Collection of stage checklist submissions"
+    }
+  }
+}
