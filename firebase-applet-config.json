@@ -1,12 +1,9 @@
 {
-  "projectId": "deductive-quiz-7x4wp",
-  "appId": "1:164094651622:web:2b37183d66a5a3ce469f27",
-  "apiKey": "AIzaSyD16_jkm3PgpDT77TgRum07J2sTagM-JyM",
-  "authDomain": "deductive-quiz-7x4wp.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-flowverge-a30c8999-1bee-4a42-82be-819880eb2cb2",
-  "storageBucket": "deductive-quiz-7x4wp.firebasestorage.app",
-  "messagingSenderId": "164094651622",
-  "measurementId": "",
-  "oAuthClientId": "164094651622-grtuisnjraee5gv38h3gajl5lofpr8e8.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "apiKey": "AIzaSyDO3Msn2wJnX4BlUkT5pqwzFxzl8GA0Nj8",
+  "authDomain": "metal-music-403615.firebaseapp.com",
+  "projectId": "metal-music-403615",
+  "storageBucket": "metal-music-403615.firebasestorage.app",
+  "messagingSenderId": "392103184698",
+  "appId": "1:392103184698:web:eaf07daf17df0c6f5e6803",
+  "measurementId": "G-P1P872BKK9"
 }
