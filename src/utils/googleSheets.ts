@@ -30,6 +30,9 @@ export async function createGoogleSpreadsheet(
 
   if (!response.ok) {
     const errorText = await response.text();
+    if (response.status === 403 && errorText.includes('SERVICE_DISABLED')) {
+      throw new Error('Google Sheets API is disabled in your Google Cloud Project. Please enable it in the Google Cloud Console.');
+    }
     throw new Error(`Failed to create Google Spreadsheet (${response.status}): ${errorText}`);
   }
 
@@ -65,6 +68,9 @@ export async function updateGoogleSpreadsheetValues(
 
   if (!response.ok) {
     const errorText = await response.text();
+    if (response.status === 403 && errorText.includes('SERVICE_DISABLED')) {
+      throw new Error('Google Sheets API is disabled in your Google Cloud Project. Please enable it in the Google Cloud Console.');
+    }
     throw new Error(`Failed to update Google Spreadsheet values (${response.status}): ${errorText}`);
   }
 
@@ -88,6 +94,9 @@ export async function getGoogleSpreadsheetValues(
 
   if (!response.ok) {
     const errorText = await response.text();
+    if (response.status === 403 && errorText.includes('SERVICE_DISABLED')) {
+      throw new Error('Google Sheets API is disabled in your Google Cloud Project. Please enable it in the Google Cloud Console.');
+    }
     throw new Error(`Failed to read Google Spreadsheet values (${response.status}): ${errorText}`);
   }
 
@@ -110,6 +119,9 @@ export async function listUserSpreadsheets(accessToken: string): Promise<Spreads
 
   if (!response.ok) {
     const errorText = await response.text();
+    if (response.status === 403 && errorText.includes('SERVICE_DISABLED')) {
+      throw new Error('Google Drive API is disabled in your Google Cloud Project. Please enable it in the Google Cloud Console for project 392103184698.');
+    }
     throw new Error(`Failed to list Google Spreadsheets from Drive (${response.status}): ${errorText}`);
   }
 
