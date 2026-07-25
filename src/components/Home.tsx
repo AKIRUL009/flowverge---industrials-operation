@@ -166,14 +166,9 @@ Return ONLY the JSON array.`
       }
     } catch (err: any) {
       console.error('Risk analysis error:', err);
-      // 3. Graceful fallback on 429 or other AI errors
-      if (err?.status === 429 || err?.message?.includes('429')) {
-        console.warn('AI Rate limit hit, using local heuristic fallback');
-        setRiskAlerts(localRisks);
-      } else if (err?.status === 404 || err?.message?.includes('404')) {
-        console.warn('AI Model not found, using local heuristic fallback');
-        setRiskAlerts(localRisks);
-      }
+      // 3. Graceful fallback for any AI errors
+      console.warn('AI Error, using local heuristic fallback');
+      setRiskAlerts(localRisks);
     } finally {
       setRiskLoading(false);
     }

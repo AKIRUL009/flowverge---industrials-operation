@@ -164,6 +164,8 @@ Rules:
       console.error('Auto-fill error:', err);
       if (err?.status === 429 || err?.message?.includes('429')) {
         alert('AI service is currently busy (rate limit reached). Please try again in a minute or fill manually.');
+      } else if (err?.message?.includes('Missing Gemini API Key')) {
+        alert('Gemini API Key is missing. Please add VITE_GEMINI_API_KEY in your Netlify settings, or configure it in the app Admin Settings.');
       } else {
         alert('AI could not process the photo. Please fill manually.');
       }
@@ -233,6 +235,8 @@ Rules:
         console.error('Voice processing error:', err);
         if (err?.status === 429 || err?.message?.includes('429')) {
           alert('AI service is currently busy (rate limit reached). Please try again in a minute or type manually.');
+        } else if (err?.message?.includes('Missing Gemini API Key')) {
+          alert('Gemini API Key is missing. Please add VITE_GEMINI_API_KEY in your Netlify settings, or configure it in the app Admin Settings.');
         } else {
           alert('AI could not process the voice input. Please type manually.');
         }

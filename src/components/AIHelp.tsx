@@ -77,9 +77,13 @@ export default function AIHelp() {
         description: input
       }, token!);
 
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setMessages(prev => [...prev, { role: 'ai', content: 'Error connecting to AI Brain. Please try again.', error: true }]);
+      let errMsg = 'Error connecting to AI Brain. Please try again.';
+      if (err?.message?.includes('Missing Gemini API Key')) {
+        errMsg = 'Gemini API Key is missing. Please add VITE_GEMINI_API_KEY in your Netlify settings, or configure it in the app Admin Settings.';
+      }
+      setMessages(prev => [...prev, { role: 'ai', content: errMsg, error: true }]);
     } finally {
       setLoading(false);
     }
