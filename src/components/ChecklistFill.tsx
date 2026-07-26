@@ -14,11 +14,18 @@ import {
   Check,
   Sparkles,
   Mic,
-  MicOff
+  MicOff,
+  FileJson,
+  Download,
+  MapPin,
+  Compass,
+  User,
+  Building2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from '@google/genai';
 import { getAIInstance } from '../utils/ai';
+import GeotagCamera, { GeotagMetadata } from './GeotagCamera';
 
 interface ChecklistItem {
   id: number;
@@ -35,9 +42,8 @@ interface Answer {
   answer_value: string;
   remarks: string;
   quantity?: number;
+  photo_metadata?: GeotagMetadata | any;
 }
-
-import GeotagCamera from './GeotagCamera';
 
 const parseAISafe = (text: string, fallback: any) => {
   try {
@@ -61,6 +67,7 @@ export default function ChecklistFill() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [showCamera, setShowCamera] = useState<number | null>(null);
+  const [site, setSite] = useState<any>(null);
 
   const [autoFilling, setAutoFilling] = useState(false);
   const [showAutoFillCamera, setShowAutoFillCamera] = useState(false);
@@ -72,12 +79,13 @@ export default function ChecklistFill() {
     fetchData();
   }, [siteId, stageId]);
 
-  const handlePhotoCapture = (itemId: number, base64: string) => {
+  const handlePhotoCapture = (itemId: number, base64: string, metadata?: GeotagMetadata) => {
     setAnswers(prev => ({
       ...prev,
       [itemId]: {
         ...(prev[itemId] || { item_id: itemId, remarks: '' }),
-        answer_value: base64
+        answer_value: base64,
+        photo_metadata: metadata
       }
     }));
     setShowCamera(null);
@@ -260,10 +268,15 @@ Rules:
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [templateRes, responseRes] = await Promise.all([
+      const [templateRes, responseRes, siteRes] = await Promise.all([
         api.get(`/api/checklists/template/${stageId}`, token!),
-        api.get(`/api/checklists/response/${siteId}/${stageId}`, token!)
+        api.get(`/api/checklists/response/${siteId}/${stageId}`, token!),
+        api.get(`/api/sites/${siteId}`, token!).catch(() => null)
       ]);
+
+      if (siteRes) {
+        setSite(siteRes);
+      }
 
       if (templateRes) {
         setItems(templateRes.items || []);
@@ -273,11 +286,16 @@ Rules:
         setStatus(responseRes.status);
         const answerMap: Record<number, Answer> = {};
         (responseRes.answers || []).forEach((a: any) => {
+          let meta = a.photo_metadata;
+          if (typeof meta === 'string') {
+            try { meta = JSON.parse(meta); } catch (e) {}
+          }
           answerMap[a.item_id] = {
             item_id: a.item_id,
             answer_value: a.answer_value,
             remarks: a.remarks || '',
-            quantity: a.quantity
+            quantity: a.quantity,
+            photo_metadata: meta
           };
         });
         setAnswers(answerMap);
@@ -547,19 +565,74 @@ Rules:
                 {item.answer_type === 'Photo' && (
                   <div className="space-y-3">
                     {answers[item.id]?.answer_value ? (
-                      <div className="relative aspect-video rounded-xl overflow-hidden border border-zinc-200">
-                        <img 
-                          src={answers[item.id].answer_value} 
-                          alt="Proof" 
-                          className="w-full h-full object-cover"
-                        />
-                        {status !== 'Locked' && (
-                          <button 
-                            onClick={() => setAnswers(prev => ({ ...prev, [item.id]: { ...prev[item.id], answer_value: '' } }))}
-                            className="absolute top-2 right-2 p-1 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
+                      <div className="space-y-2">
+                        <div className="relative aspect-video rounded-xl overflow-hidden border border-zinc-200">
+                          <img 
+                            src={answers[item.id].answer_value} 
+                            alt="Proof" 
+                            className="w-full h-full object-cover"
+                          />
+                          {status !== 'Locked' && (
+                            <button 
+                              onClick={() => setAnswers(prev => ({ ...prev, [item.id]: { ...prev[item.id], answer_value: '', photo_metadata: undefined } }))}
+                              className="absolute top-2 right-2 p-1 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Geotag Metadata JSON Attachment Badge */}
+                        {answers[item.id]?.photo_metadata && (
+                          <div className="p-3 bg-zinc-900 text-white rounded-xl text-xs space-y-2 border border-zinc-800 shadow-sm">
+                            <div className="flex items-center justify-between border-b border-zinc-800 pb-1.5">
+                              <span className="font-bold text-emerald-400 flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
+                                <FileJson className="w-3.5 h-3.5" />
+                                Geotag Metadata JSON Attachment
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const meta = answers[item.id].photo_metadata;
+                                  const blob = new Blob([JSON.stringify(meta, null, 2)], { type: 'application/json' });
+                                  const url = URL.createObjectURL(blob);
+                                  const a = document.createElement('a');
+                                  a.href = url;
+                                  a.download = `photo_geotag_metadata_${item.id}.json`;
+                                  document.body.appendChild(a);
+                                  a.click();
+                                  document.body.removeChild(a);
+                                  URL.revokeObjectURL(url);
+                                }}
+                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-[10px] flex items-center gap-1 transition-all"
+                              >
+                                <Download className="w-3 h-3" />
+                                Download JSON
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-zinc-300">
+                              <div>
+                                <span className="text-[9px] text-zinc-500 block uppercase font-bold">Latitude / Longitude</span>
+                                <span className="font-semibold text-white">
+                                  {answers[item.id].photo_metadata.latitude ? `${answers[item.id].photo_metadata.latitude.toFixed(5)}°, ${answers[item.id].photo_metadata.longitude.toFixed(5)}°` : 'N/A'}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-[9px] text-zinc-500 block uppercase font-bold">Site Name</span>
+                                <span className="font-semibold text-white truncate block">{answers[item.id].photo_metadata.siteName || 'N/A'}</span>
+                              </div>
+                              <div>
+                                <span className="text-[9px] text-zinc-500 block uppercase font-bold">Auditor</span>
+                                <span className="font-semibold text-white truncate block">{answers[item.id].photo_metadata.userName || 'N/A'}</span>
+                              </div>
+                              <div>
+                                <span className="text-[9px] text-zinc-500 block uppercase font-bold">Compass Bearing</span>
+                                <span className="font-semibold text-emerald-400">
+                                  {answers[item.id].photo_metadata.compassHeading}° {answers[item.id].photo_metadata.compassDirection}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
                         )}
                       </div>
                     ) : (
@@ -580,6 +653,8 @@ Rules:
                   <GeotagCamera 
                     onCapture={(base64) => handlePhotoCapture(item.id, base64)}
                     onClose={() => setShowCamera(null)}
+                    siteName={site?.name}
+                    userName={user?.full_name}
                   />
                 )}
 
@@ -622,6 +697,8 @@ Rules:
         <GeotagCamera
           onCapture={handleAutoFill}
           onClose={() => setShowAutoFillCamera(false)}
+          siteName={site?.name}
+          userName={user?.full_name}
         />
       )}
     </div>

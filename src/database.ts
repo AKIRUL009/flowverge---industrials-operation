@@ -65,6 +65,11 @@ export function initializeDatabase() {
   try { db.exec('ALTER TABLE sites ADD COLUMN client_site_id TEXT'); } catch (e) {}
   try { db.exec('ALTER TABLE stages ADD COLUMN working_principle TEXT'); } catch (e) {}
   try { db.exec('ALTER TABLE stages ADD COLUMN necessary_functions TEXT'); } catch (e) {}
+  try { db.exec("ALTER TABLE stages ADD COLUMN assigned_role TEXT DEFAULT 'Site Supervisor'"); } catch (e) {}
+  try { db.exec("ALTER TABLE stages ADD COLUMN attendance_mode TEXT DEFAULT 'Free for All Users'"); } catch (e) {}
+  try { db.exec("ALTER TABLE stages ADD COLUMN who_assigns_work TEXT DEFAULT 'Project Manager'"); } catch (e) {}
+  try { db.exec("ALTER TABLE stages ADD COLUMN approver_role TEXT DEFAULT 'Project Manager'"); } catch (e) {}
+  try { db.exec('ALTER TABLE stages ADD COLUMN required_checklist_id INTEGER'); } catch (e) {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS stage_history (
@@ -121,6 +126,7 @@ export function initializeDatabase() {
       answer_value TEXT,
       remarks TEXT,
       quantity REAL,
+      photo_metadata TEXT,
       FOREIGN KEY (response_id) REFERENCES checklist_responses(id),
       FOREIGN KEY (item_id) REFERENCES checklist_items(id)
     );
@@ -279,6 +285,12 @@ export function initializeDatabase() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  try {
+    db.exec('ALTER TABLE checklist_answers ADD COLUMN photo_metadata TEXT');
+  } catch (e) {
+    // Column already exists or table freshly created with column
+  }
 
   // Seed Roles
   const rolesCount = db.prepare('SELECT count(*) as count FROM roles').get().count;

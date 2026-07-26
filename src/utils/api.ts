@@ -121,40 +121,87 @@ export const safeJson = async (response: Response, url: string = '', method: str
     }
 
     if (response.status === 401 && data?.error === 'Invalid credentials') {
-      throw new Error('Invalid credentials');
+      const err: any = new Error('Invalid credentials');
+      err.isServerError = true;
+      throw err;
     }
 
     if (response.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      window.dispatchEvent(new Event('auth:unauthorized'));
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
-      throw new Error(data?.error || 'Session expired. Please login again.');
+      const authErr: any = new Error(data?.error || 'Session expired. Please login again.');
+      authErr.isAuthError = true;
+      throw authErr;
+    }
+
+    if (response.status === 429) {
+      const serverErr: any = new Error(data?.error || 'Rate limit reached (429). Please wait a few seconds and try again.');
+      serverErr.isServerError = true;
+      serverErr.isRateLimit = true;
+      throw serverErr;
+    }
+
+    // Real server error (e.g. 400, 403, 409, 500)
+    if (response.status !== 404) {
+      const serverErr: any = new Error(data?.error || `Request failed with status ${response.status}`);
+      serverErr.isServerError = true;
+      throw serverErr;
     }
 
     // Static / Netlify Fallback if 404 or server unreachable
-    if (response.status === 404 || !response.ok) {
-      console.warn(`[Netlify Static Mode] API route ${url} not found on server. Using client static fallback.`);
-      return getStaticFallback(url, method, reqData);
-    }
-
-    throw new Error(data?.error || 'Request failed');
+    console.warn(`[Netlify Static Mode] API route ${url} not found on server. Using client static fallback.`);
+    return getStaticFallback(url, method, reqData);
   }
 
   return await response.json().catch(() => ({}));
 };
 
+const fetchWithRetry = async (url: string, options: RequestInit, retries = 2, delayMs = 1000): Promise<Response> => {
+  try {
+    const res = await fetch(url, options);
+    if (res.status === 429 && retries > 0) {
+      console.warn(`[Rate Limit 429] Retrying ${url} in ${delayMs}ms... (${retries} attempts left)`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      return fetchWithRetry(url, options, retries - 1, delayMs * 1.5);
+    }
+    return res;
+  } catch (err) {
+    if (retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      return fetchWithRetry(url, options, retries - 1, delayMs * 1.5);
+    }
+    throw err;
+  }
+};
+
+const handleCatch = (err: any, url: string, method: string, data?: any) => {
+  if (err?.isAuthError || err?.message?.includes('Invalid credentials')) {
+    throw err;
+  }
+  if (err?.isRateLimit && method === 'GET') {
+    console.warn(`[Rate Limit Fallback] Route ${url} hit status 429. Serving static fallback data.`);
+    return getStaticFallback(url, method, data);
+  }
+  if (err?.isServerError) {
+    throw err;
+  }
+  return getStaticFallback(url, method, data);
+};
+
 export const api = {
   get: (url: string, token?: string) => 
-    fetch(url, {
+    fetchWithRetry(url, {
       headers: token ? { 'Authorization': `Bearer ${token}` } : {}
     })
     .then(res => safeJson(res, url, 'GET'))
-    .catch(() => getStaticFallback(url, 'GET')),
+    .catch(err => handleCatch(err, url, 'GET')),
     
   post: (url: string, data: any, token?: string) =>
-    fetch(url, {
+    fetchWithRetry(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -163,10 +210,10 @@ export const api = {
       body: JSON.stringify(data)
     })
     .then(res => safeJson(res, url, 'POST', data))
-    .catch(() => getStaticFallback(url, 'POST', data)),
+    .catch(err => handleCatch(err, url, 'POST', data)),
 
   put: (url: string, data: any, token?: string) =>
-    fetch(url, {
+    fetchWithRetry(url, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -175,14 +222,26 @@ export const api = {
       body: JSON.stringify(data)
     })
     .then(res => safeJson(res, url, 'PUT', data))
-    .catch(() => getStaticFallback(url, 'PUT', data)),
+    .catch(err => handleCatch(err, url, 'PUT', data)),
+
+  patch: (url: string, data: any, token?: string) =>
+    fetchWithRetry(url, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify(data)
+    })
+    .then(res => safeJson(res, url, 'PATCH', data))
+    .catch(err => handleCatch(err, url, 'PATCH', data)),
 
   delete: (url: string, token?: string) =>
-    fetch(url, {
+    fetchWithRetry(url, {
       method: 'DELETE',
       headers: token ? { 'Authorization': `Bearer ${token}` } : {}
     })
     .then(res => safeJson(res, url, 'DELETE'))
-    .catch(() => getStaticFallback(url, 'DELETE'))
+    .catch(err => handleCatch(err, url, 'DELETE'))
 };
 

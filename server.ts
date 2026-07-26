@@ -40,6 +40,44 @@ const createNotification = (userId: number, message: string, type: string) => {
     .run(userId, message, type);
 };
 
+// Helper: Downstream Tasks Generator upon Stage Advancement
+const triggerDownstreamTasks = (siteId: number, nextStageId: number, triggeredById: number) => {
+  const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(siteId);
+  const nextStage = db.prepare('SELECT * FROM stages WHERE id = ?').get(nextStageId);
+  if (!site || !nextStage) return 0;
+
+  const assigneeId = site.supervisor_id || site.vendor_id || triggeredById;
+  let taskCount = 0;
+
+  // 1. Primary Operational Task for Stage
+  const mainTitle = `[Stage ${nextStage.sequence_order}] ${nextStage.name} Execution`;
+  const mainDesc = nextStage.necessary_functions || `Execute all mandatory operations and quality checks for ${nextStage.name}`;
+  
+  db.prepare(`
+    INSERT INTO tasks (site_id, assigned_to, title, description, status, due_date)
+    VALUES (?, ?, ?, ?, 'Pending', datetime('now', '+' || COALESCE(?, 7) || ' days'))
+  `).run(siteId, assigneeId, mainTitle, mainDesc, nextStage.max_allowed_days || 7);
+  taskCount++;
+
+  // 2. Auto-generate tasks from active checklist items for the stage
+  const template = db.prepare('SELECT id FROM checklist_templates WHERE stage_id = ? AND is_active = 1').get(nextStageId);
+  if (template) {
+    const items = db.prepare('SELECT * FROM checklist_items WHERE template_id = ? ORDER BY order_no ASC').all(template.id);
+    for (const item of items) {
+      const taskTitle = `[${nextStage.name}] Checklist: ${item.question_text}`;
+      const taskDesc = `Verify requirement (${item.answer_type}). Mandatory: ${item.is_mandatory ? 'Yes' : 'No'}`;
+      db.prepare(`
+        INSERT INTO tasks (site_id, assigned_to, title, description, status, due_date)
+        VALUES (?, ?, ?, ?, 'Pending', datetime('now', '+' || COALESCE(?, 7) || ' days'))
+      `).run(siteId, assigneeId, taskTitle, taskDesc, nextStage.max_allowed_days || 7);
+      taskCount++;
+    }
+  }
+
+  logAction(triggeredById, 'Downstream Tasks Triggered', `Triggered ${taskCount} downstream task(s) for site ${site.name} upon advancing to Stage ${nextStage.name}`, siteId);
+  return taskCount;
+};
+
 // Middleware: Authenticate
 const authenticate = (req: any, res: any, next: any) => {
   const authHeader = req.headers.authorization;
@@ -60,7 +98,10 @@ const authenticate = (req: any, res: any, next: any) => {
     req.user = decoded;
     next();
   } catch (err: any) {
-    console.error('JWT verification failed:', err.message, 'Token length:', token.length);
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Token expired', code: 'TOKEN_EXPIRED' });
+    }
+    console.warn('JWT verification failed:', err.message);
     res.status(401).json({ error: 'Invalid token' });
   }
 };
@@ -81,7 +122,7 @@ app.post('/api/login', (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
+  const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '30d' });
   
   const { password_hash, ...userWithoutPassword } = user;
   logAction(user.id, 'Login', 'User logged in successfully');
@@ -113,7 +154,16 @@ app.get('/api/sites', authenticate, (req: any, res) => {
 });
 
 app.get('/api/stages', authenticate, (req, res) => {
-  res.json(db.prepare('SELECT * FROM stages ORDER BY sequence_order').all());
+  const stages = db.prepare(`
+    SELECT s.*, 
+           ct.name as required_checklist_name,
+           (SELECT COUNT(*) FROM checklist_items ci WHERE ci.template_id = COALESCE(s.required_checklist_id, ct.id)) as checklist_item_count
+    FROM stages s
+    LEFT JOIN checklist_templates ct ON (s.required_checklist_id = ct.id) OR (s.required_checklist_id IS NULL AND ct.stage_id = s.id AND ct.is_active = 1)
+    GROUP BY s.id
+    ORDER BY s.sequence_order
+  `).all();
+  res.json(stages);
 });
 
 app.get('/api/sites/:id', authenticate, (req, res) => {
@@ -249,9 +299,10 @@ app.post('/api/checklists/response', authenticate, (req: any, res) => {
       responseId = result.lastInsertRowid;
     }
 
-    const insertAnswer = db.prepare('INSERT INTO checklist_answers (response_id, item_id, answer_value, remarks, quantity) VALUES (?, ?, ?, ?, ?)');
+    const insertAnswer = db.prepare('INSERT INTO checklist_answers (response_id, item_id, answer_value, remarks, quantity, photo_metadata) VALUES (?, ?, ?, ?, ?, ?)');
     for (const ans of answers) {
-      insertAnswer.run(responseId, ans.item_id, ans.answer_value, ans.remarks, ans.quantity);
+      const metaStr = ans.photo_metadata ? (typeof ans.photo_metadata === 'string' ? ans.photo_metadata : JSON.stringify(ans.photo_metadata)) : null;
+      insertAnswer.run(responseId, ans.item_id, ans.answer_value, ans.remarks, ans.quantity, metaStr);
     }
 
     // --- STAGE CONDITION ENGINE ---
@@ -282,9 +333,11 @@ app.post('/api/checklists/response', authenticate, (req: any, res) => {
             db.prepare('UPDATE sites SET current_stage_id = ?, stage_started_at = CURRENT_TIMESTAMP WHERE id = ?')
               .run(nextStage.id, site.id);
             
-            createNotification(site.supervisor_id, `Stage advanced to ${nextStage.name} for ${site.name}`, 'general');
-            createNotification(site.vendor_id, `Stage advanced to ${nextStage.name} for ${site.name}`, 'general');
-            logAction(req.user.id, 'Auto Stage Advance', `System automatically advanced site ${site.name} to stage ${nextStage.name} after checklist completion`, site_id);
+            const tasksCreated = triggerDownstreamTasks(site.id, nextStage.id, req.user.id);
+
+            if (site.supervisor_id) createNotification(site.supervisor_id, `Stage advanced to ${nextStage.name} for ${site.name}`, 'general');
+            if (site.vendor_id) createNotification(site.vendor_id, `Stage advanced to ${nextStage.name} for ${site.name}`, 'general');
+            logAction(req.user.id, 'Auto Stage Advance', `System automatically advanced site ${site.name} to stage ${nextStage.name} and triggered ${tasksCreated} downstream tasks`, site_id);
           }
         } else {
           // For other stages and non-admin users, create approval request
@@ -313,70 +366,203 @@ app.post('/api/checklists/response', authenticate, (req: any, res) => {
 // --- APPROVAL ROUTES ---
 app.post('/api/sites/:id/request-stage-change', authenticate, (req: any, res) => {
   const { reason } = req.body;
-  const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(req.params.id);
-  
+  const siteId = Number(req.params.id);
+  const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(siteId);
+  if (!site) return res.status(404).json({ error: 'Site not found' });
+
+  const existingApproval = db.prepare("SELECT id FROM approvals WHERE linked_type = 'Stage' AND linked_id = ? AND status = 'Pending'").get(siteId);
+  if (existingApproval) {
+    return res.status(400).json({ error: 'A stage change approval request is already pending for this site.' });
+  }
+
   const result = db.prepare('INSERT INTO approvals (linked_type, linked_id, requested_by, reason) VALUES (?, ?, ?, ?)')
-    .run('Stage', req.params.id, req.user.id, reason);
-  
+    .run('Stage', siteId, req.user.id, reason || 'Stage change requested');
+
   // Notify PMs
-  const pms = db.prepare('SELECT id FROM users WHERE role_id = (SELECT id FROM roles WHERE name = \'Project Manager\')').all();
+  const pms = db.prepare("SELECT id FROM users WHERE role_id = (SELECT id FROM roles WHERE name = 'Project Manager')").all();
   pms.forEach((pm: any) => {
     createNotification(pm.id, `Stage change request for ${site.name}`, 'approval');
   });
 
+  logAction(req.user.id, 'Stage Change Request', `Requested stage advancement for site ${site.name}`, siteId);
   res.json({ id: result.lastInsertRowid });
 });
 
 app.get('/api/approvals', authenticate, (req, res) => {
-  const approvals = db.prepare(`
-    SELECT a.*, s.name as site_name, u.full_name as requester_name
+  const statusFilter = (req.query.status as string) || 'Pending';
+  
+  let query = `
+    SELECT a.*, 
+           COALESCE(s.name, 'Site #' || a.linked_id) as site_name, 
+           s.site_custom_id,
+           COALESCE(st_from.name, 'Stage ' || s.current_stage_id) as from_stage_name,
+           COALESCE(st_to.name, 'Next Stage') as to_stage_name,
+           COALESCE(u_req.full_name, 'Unknown User') as requested_by_name,
+           COALESCE(u_req.full_name, 'Unknown User') as requester_name,
+           COALESCE(r_req.name, 'User') as requested_by_role,
+           u_req.email as requested_by_email,
+           COALESCE(u_app.full_name, 'N/A') as approved_by_name,
+           COALESCE(r_app.name, 'N/A') as approved_by_role
     FROM approvals a
-    JOIN sites s ON a.linked_id = s.id
-    JOIN users u ON a.requested_by = u.id
-    WHERE a.status = 'Pending'
-  `).all();
+    LEFT JOIN sites s ON a.linked_id = s.id
+    LEFT JOIN stages st_from ON s.current_stage_id = st_from.id
+    LEFT JOIN stages st_to ON st_to.sequence_order = st_from.sequence_order + 1
+    LEFT JOIN users u_req ON a.requested_by = u_req.id
+    LEFT JOIN roles r_req ON u_req.role_id = r_req.id
+    LEFT JOIN users u_app ON a.approved_by = u_app.id
+    LEFT JOIN roles r_app ON u_app.role_id = r_app.id
+  `;
+
+  if (statusFilter !== 'all') {
+    query += ` WHERE a.status = '${statusFilter}'`;
+  }
+
+  query += ` ORDER BY a.created_at DESC`;
+
+  const approvals = db.prepare(query).all();
   res.json(approvals);
 });
 
 app.post('/api/approvals/:id', authenticate, (req: any, res) => {
   const { status, reason } = req.body;
-  const approval = db.prepare('SELECT * FROM approvals WHERE id = ?').get(req.params.id);
+  const approvalId = Number(req.params.id);
+  const approval = db.prepare('SELECT * FROM approvals WHERE id = ?').get(approvalId);
   
+  if (!approval) {
+    return res.status(404).json({ error: 'Approval request not found' });
+  }
+
+  if (approval.status !== 'Pending') {
+    return res.status(400).json({ error: `Approval request has already been ${approval.status}` });
+  }
+
+  let tasksCreated = 0;
+
   if (status === 'Approved' && approval.linked_type === 'Stage') {
     const site = db.prepare('SELECT * FROM sites WHERE id = ?').get(approval.linked_id);
-    
-    // Checklist Gate
+    if (!site) {
+      return res.status(404).json({ error: 'Associated site not found' });
+    }
+
+    // Checklist Gate Check
     const template = db.prepare('SELECT id FROM checklist_templates WHERE stage_id = ? AND is_active = 1').get(site.current_stage_id);
     if (template) {
       const response = db.prepare('SELECT status FROM checklist_responses WHERE site_id = ? AND template_id = ?').get(site.id, template.id);
-      console.log('Checklist response:', response);
       if (!response || (response.status !== 'Submitted' && response.status !== 'Locked')) {
-        return res.status(400).json({ error: 'Checklist must be submitted before stage change' });
+        // If Project Manager or Admin is explicitly approving, allow override but log it
+        const isPMOrAdmin = req.user.role === 'Project Manager' || req.user.role === 'Admin';
+        if (!isPMOrAdmin) {
+          return res.status(400).json({ error: 'Checklist must be submitted before stage change can be approved.' });
+        } else {
+          logAction(req.user.id, 'Checklist Override', `Project Manager/Admin ${req.user.email} approved stage advancement prior to checklist lock for site ${site.name}`, site.id);
+        }
       }
     }
 
     const nextStage = db.prepare(`
-      SELECT id FROM stages 
+      SELECT id, name FROM stages 
       WHERE sequence_order = (
         SELECT sequence_order + 1 FROM stages WHERE id = ?
       )
     `).get(site.current_stage_id);
 
-    if (nextStage) {
-      db.prepare('INSERT INTO stage_history (site_id, from_stage_id, to_stage_id, changed_by, approved_by) VALUES (?, ?, ?, ?, ?)')
-        .run(site.id, site.current_stage_id, nextStage.id, approval.requested_by, req.user.id);
-      db.prepare('UPDATE sites SET current_stage_id = ?, stage_started_at = CURRENT_TIMESTAMP WHERE id = ?')
-        .run(nextStage.id, site.id);
-      
-      createNotification(site.supervisor_id, `Stage advanced to ${nextStage.id} for ${site.name}`, 'general');
-      createNotification(site.vendor_id, `Stage advanced to ${nextStage.id} for ${site.name}`, 'general');
+    if (!nextStage) {
+      return res.status(400).json({ error: 'Site is already at the final stage' });
+    }
+
+    db.prepare('INSERT INTO stage_history (site_id, from_stage_id, to_stage_id, changed_by, approved_by) VALUES (?, ?, ?, ?, ?)')
+      .run(site.id, site.current_stage_id, nextStage.id, approval.requested_by || req.user.id, req.user.id);
+    
+    db.prepare('UPDATE sites SET current_stage_id = ?, stage_started_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(nextStage.id, site.id);
+    
+    // Trigger downstream tasks for the new stage
+    tasksCreated = triggerDownstreamTasks(site.id, nextStage.id, req.user.id);
+
+    if (site.supervisor_id) createNotification(site.supervisor_id, `Stage advanced to ${nextStage.name} for ${site.name}. ${tasksCreated} downstream tasks assigned.`, 'general');
+    if (site.vendor_id) createNotification(site.vendor_id, `Stage advanced to ${nextStage.name} for ${site.name}.`, 'general');
+    
+    const approver = db.prepare(`SELECT u.full_name, r.name as role FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?`).get(req.user.id);
+    const approverText = approver ? `${approver.full_name} (${approver.role})` : `User #${req.user.id}`;
+
+    logAction(req.user.id, 'Stage Change Approved', `Stage advancement for site ${site.name} to ${nextStage.name} APPROVED by ${approverText}. Triggered ${tasksCreated} downstream task(s).`, site.id);
+  } else if (status === 'Rejected' && approval.linked_type === 'Stage') {
+    const site = db.prepare('SELECT name FROM sites WHERE id = ?').get(approval.linked_id);
+    const rejector = db.prepare(`SELECT u.full_name, r.name as role FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?`).get(req.user.id);
+    const rejectorText = rejector ? `${rejector.full_name} (${rejector.role})` : `User #${req.user.id}`;
+    
+    if (site) {
+      logAction(req.user.id, 'Stage Change Rejected', `Stage advancement for site ${site.name} REJECTED by ${rejectorText}. Reason: ${reason || 'No reason provided'}`, approval.linked_id);
     }
   }
 
-  db.prepare('UPDATE approvals SET status = ?, approved_by = ?, reason = ? WHERE id = ?')
-    .run(status, req.user.id, reason, req.params.id);
+  db.prepare('UPDATE approvals SET status = ?, approved_by = ?, reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(status, req.user.id, reason || status, approvalId);
   
-  createNotification(approval.requested_by, `Your ${approval.linked_type} request was ${status}`, 'approval');
+  if (approval.requested_by) {
+    createNotification(approval.requested_by, `Your ${approval.linked_type} request was ${status} by Project Management.`, 'approval');
+  }
+  res.json({ success: true, tasks_created: tasksCreated });
+});
+
+// --- LOGS & STATE TRANSITION AUDIT ROUTES ---
+app.get('/api/logs', authenticate, (req, res) => {
+  const siteId = req.query.siteId ? Number(req.query.siteId) : null;
+  let query = `
+    SELECT l.*, 
+           COALESCE(u.full_name, 'System') as user_name,
+           COALESCE(r.name, 'System') as user_role,
+           s.name as site_name
+    FROM logs l
+    LEFT JOIN users u ON l.user_id = u.id
+    LEFT JOIN roles r ON u.role_id = r.id
+    LEFT JOIN sites s ON l.site_id = s.id
+  `;
+  const params: any[] = [];
+  if (siteId) {
+    query += ` WHERE l.site_id = ?`;
+    params.push(siteId);
+  }
+  query += ` ORDER BY l.timestamp DESC LIMIT 250`;
+
+  res.json(db.prepare(query).all(...params));
+});
+
+// --- TASK EXECUTION ROUTES ---
+app.get('/api/sites/:id/tasks', authenticate, (req, res) => {
+  const tasks = db.prepare(`
+    SELECT t.*, u.full_name as assignee_name, r.name as assignee_role
+    FROM tasks t
+    LEFT JOIN users u ON t.assigned_to = u.id
+    LEFT JOIN roles r ON u.role_id = r.id
+    WHERE t.site_id = ?
+    ORDER BY t.created_at DESC
+  `).all(req.params.id);
+  res.json(tasks);
+});
+
+app.post('/api/sites/:id/tasks', authenticate, (req: any, res) => {
+  const { title, description, assigned_to, due_date } = req.body;
+  const siteId = Number(req.params.id);
+  if (!title) return res.status(400).json({ error: 'Title is required' });
+
+  const result = db.prepare(`
+    INSERT INTO tasks (site_id, assigned_to, title, description, status, due_date)
+    VALUES (?, ?, ?, ?, 'Pending', ?)
+  `).run(siteId, assigned_to || req.user.id, title, description || '', due_date || null);
+
+  logAction(req.user.id, 'Create Task', `Created task '${title}' for site ID ${siteId}`, siteId);
+  res.json({ id: result.lastInsertRowid });
+});
+
+app.patch('/api/tasks/:id', authenticate, (req: any, res) => {
+  const { status } = req.body;
+  const taskId = Number(req.params.id);
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+
+  db.prepare('UPDATE tasks SET status = ? WHERE id = ?').run(status, taskId);
+  logAction(req.user.id, 'Update Task Status', `Updated task '${task.title}' status to ${status}`, task.site_id);
   res.json({ success: true });
 });
 
@@ -754,17 +940,43 @@ const checkRole = (roles: string[]) => (req: any, res: any, next: any) => {
 
 // --- ADMIN WORKFLOW ROUTES ---
 app.post('/api/admin/stages', authenticate, checkRole(['Admin', 'Project Manager']), (req: any, res) => {
-  const { name, sequence_order, max_allowed_days, working_principle, necessary_functions } = req.body;
-  const result = db.prepare('INSERT INTO stages (name, sequence_order, max_allowed_days, working_principle, necessary_functions) VALUES (?, ?, ?, ?, ?)')
-    .run(name, sequence_order, max_allowed_days, working_principle, necessary_functions);
+  const { 
+    name, sequence_order, max_allowed_days, working_principle, necessary_functions,
+    assigned_role, attendance_mode, who_assigns_work, approver_role, required_checklist_id 
+  } = req.body;
+
+  const result = db.prepare(`
+    INSERT INTO stages (
+      name, sequence_order, max_allowed_days, working_principle, necessary_functions,
+      assigned_role, attendance_mode, who_assigns_work, approver_role, required_checklist_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    name, sequence_order, max_allowed_days || 7, working_principle || '', necessary_functions || '',
+    assigned_role || 'Site Supervisor', attendance_mode || 'Free for All Users', who_assigns_work || 'Project Manager',
+    approver_role || 'Project Manager', required_checklist_id || null
+  );
+
   logAction(req.user.id, 'Create Stage', `Created stage ${name}`, null);
   res.json({ id: result.lastInsertRowid });
 });
 
 app.put('/api/admin/stages/:id', authenticate, checkRole(['Admin', 'Project Manager']), (req: any, res) => {
-  const { name, sequence_order, max_allowed_days, working_principle, necessary_functions } = req.body;
-  db.prepare('UPDATE stages SET name = ?, sequence_order = ?, max_allowed_days = ?, working_principle = ?, necessary_functions = ? WHERE id = ?')
-    .run(name, sequence_order, max_allowed_days, working_principle, necessary_functions, req.params.id);
+  const { 
+    name, sequence_order, max_allowed_days, working_principle, necessary_functions,
+    assigned_role, attendance_mode, who_assigns_work, approver_role, required_checklist_id 
+  } = req.body;
+
+  db.prepare(`
+    UPDATE stages SET 
+      name = ?, sequence_order = ?, max_allowed_days = ?, working_principle = ?, necessary_functions = ?,
+      assigned_role = ?, attendance_mode = ?, who_assigns_work = ?, approver_role = ?, required_checklist_id = ?
+    WHERE id = ?
+  `).run(
+    name, sequence_order, max_allowed_days, working_principle, necessary_functions,
+    assigned_role || 'Site Supervisor', attendance_mode || 'Free for All Users', who_assigns_work || 'Project Manager',
+    approver_role || 'Project Manager', required_checklist_id || null, req.params.id
+  );
+
   logAction(req.user.id, 'Update Stage', `Updated stage ${name}`, null);
   res.json({ success: true });
 });
@@ -822,6 +1034,116 @@ app.put('/api/admin/checklists/items/:id', authenticate, checkRole(['Admin', 'Pr
 app.delete('/api/admin/checklists/items/:id', authenticate, checkRole(['Admin', 'Project Manager']), (req: any, res) => {
   db.prepare('DELETE FROM checklist_items WHERE id = ?').run(req.params.id);
   res.json({ success: true });
+});
+
+// --- CSV CHECKLIST TEMPLATE & BULK UPLOAD ENDPOINTS ---
+app.get('/api/admin/checklists/csv-template', (req, res) => {
+  const csvContent = `"Question Text","Answer Type","Mandatory","Requires Photo","Order"
+"Is site perimeter secure with safety fencing?","Yes/No","Yes","Yes",1
+"Soil compaction bearing test value (kPa)","Number","Yes","No",2
+"General excavation safety observations and notes","Text","No","No",3
+"Foundation rebar structure photo verification","Photo","Yes","Yes",4`;
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="checklist_items_template.csv"');
+  res.send(csvContent);
+});
+
+app.post('/api/admin/checklists/:id/items/bulk-csv', authenticate, checkRole(['Admin', 'Project Manager']), (req: any, res) => {
+  const templateId = req.params.id;
+  const { items, mode } = req.body; // mode: 'replace' | 'append'
+
+  const template = db.prepare('SELECT * FROM checklist_templates WHERE id = ?').get(templateId);
+  if (!template) return res.status(404).json({ error: 'Checklist template not found' });
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'No valid checklist items provided' });
+  }
+
+  const insertStmt = db.prepare(`
+    INSERT INTO checklist_items (template_id, question_text, answer_type, is_mandatory, requires_photo, order_no)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  const deleteStmt = db.prepare('DELETE FROM checklist_items WHERE template_id = ?');
+
+  const transaction = db.transaction(() => {
+    if (mode === 'replace') {
+      deleteStmt.run(templateId);
+    }
+
+    let count = 0;
+    for (const item of items) {
+      if (!item.question_text || !item.question_text.trim()) continue;
+      
+      const qText = item.question_text.trim();
+      let aType = item.answer_type || 'Yes/No';
+      const cleanType = String(aType).toLowerCase();
+      if (cleanType.includes('photo')) aType = 'Photo';
+      else if (cleanType.includes('num')) aType = 'Number';
+      else if (cleanType.includes('text')) aType = 'Text';
+      else aType = 'Yes/No';
+
+      const mandatory = (item.is_mandatory === true || item.is_mandatory === 1 || String(item.is_mandatory).toLowerCase() === 'yes' || String(item.is_mandatory).toLowerCase() === 'true') ? 1 : 0;
+      const reqPhoto = (item.requires_photo === true || item.requires_photo === 1 || String(item.requires_photo).toLowerCase() === 'yes' || String(item.requires_photo).toLowerCase() === 'true') ? 1 : 0;
+      const orderNo = item.order_no ? Number(item.order_no) : (count + 1);
+
+      insertStmt.run(templateId, qText, aType, mandatory, reqPhoto, orderNo);
+      count++;
+    }
+    return count;
+  });
+
+  const insertedCount = transaction();
+  logAction(req.user.id, 'CSV Checklist Import', `Imported ${insertedCount} items into template '${template.name}' (${mode || 'append'} mode)`, null);
+  res.json({ success: true, count: insertedCount });
+});
+
+app.post('/api/admin/checklists/import-csv', authenticate, checkRole(['Admin', 'Project Manager']), (req: any, res) => {
+  const { stage_id, name, items } = req.body;
+  if (!stage_id || !name) {
+    return res.status(400).json({ error: 'Stage ID and checklist name are required' });
+  }
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'No items provided in CSV' });
+  }
+
+  const insertTemplateStmt = db.prepare('INSERT INTO checklist_templates (stage_id, name) VALUES (?, ?)');
+  const insertItemStmt = db.prepare(`
+    INSERT INTO checklist_items (template_id, question_text, answer_type, is_mandatory, requires_photo, order_no)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+
+  const transaction = db.transaction(() => {
+    const templateResult = insertTemplateStmt.run(stage_id, name);
+    const templateId = templateResult.lastInsertRowid;
+
+    let count = 0;
+    for (const item of items) {
+      if (!item.question_text || !item.question_text.trim()) continue;
+
+      const qText = item.question_text.trim();
+      let aType = item.answer_type || 'Yes/No';
+      const cleanType = String(aType).toLowerCase();
+      if (cleanType.includes('photo')) aType = 'Photo';
+      else if (cleanType.includes('num')) aType = 'Number';
+      else if (cleanType.includes('text')) aType = 'Text';
+      else aType = 'Yes/No';
+
+      const mandatory = (item.is_mandatory === true || item.is_mandatory === 1 || String(item.is_mandatory).toLowerCase() === 'yes' || String(item.is_mandatory).toLowerCase() === 'true') ? 1 : 0;
+      const reqPhoto = (item.requires_photo === true || item.requires_photo === 1 || String(item.requires_photo).toLowerCase() === 'yes' || String(item.requires_photo).toLowerCase() === 'true') ? 1 : 0;
+      const orderNo = item.order_no ? Number(item.order_no) : (count + 1);
+
+      insertItemStmt.run(templateId, qText, aType, mandatory, reqPhoto, orderNo);
+      count++;
+    }
+    return { templateId, count };
+  });
+
+  const result = transaction();
+  logAction(req.user.id, 'CSV Checklist Creation', `Created checklist '${name}' with ${result.count} items via CSV import`, null);
+  res.json({ success: true, id: result.templateId, count: result.count });
 });
 
 // --- INTEGRATION ROUTES ---

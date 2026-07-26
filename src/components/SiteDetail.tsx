@@ -23,7 +23,10 @@ import {
   Navigation,
   ExternalLink,
   Compass,
-  Copy
+  Copy,
+  ListTodo,
+  Activity,
+  ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -51,6 +54,8 @@ export default function SiteDetail() {
   const [checklist, setChecklist] = useState<any>(null);
   const [materials, setMaterials] = useState<any[]>([]);
   const [safetyLogs, setSafetyLogs] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [siteLogs, setSiteLogs] = useState<any[]>([]);
   const [showSafetyModal, setShowSafetyModal] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [requestReason, setRequestReason] = useState('');
@@ -64,16 +69,20 @@ export default function SiteDetail() {
 
   const fetchData = async () => {
     try {
-      const [siteData, historyData, materialsData, safetyData] = await Promise.all([
+      const [siteData, historyData, materialsData, safetyData, tasksData, logsData] = await Promise.all([
         api.get(`/api/sites/${id}`, token!),
         api.get(`/api/sites/${id}/history`, token!),
         api.get(`/api/warehouse/transactions?site_id=${id}`, token!),
-        api.get('/api/safety/logs', token!)
+        api.get('/api/safety/logs', token!),
+        api.get(`/api/sites/${id}/tasks`, token!),
+        api.get(`/api/logs?siteId=${id}`, token!)
       ]);
       setSite(siteData);
       setHistory(historyData);
       setMaterials(materialsData);
       setSafetyLogs(safetyData.filter((l: any) => l.site_id === Number(id)));
+      setTasks(Array.isArray(tasksData) ? tasksData : []);
+      setSiteLogs(Array.isArray(logsData) ? logsData : []);
       
       // Fetch checklist for current stage
       const checklistData = await api.get(`/api/checklists/template/${siteData.current_stage_id}`, token!);
@@ -91,6 +100,16 @@ export default function SiteDetail() {
   useEffect(() => {
     fetchData();
   }, [id, token]);
+
+  const handleToggleTaskStatus = async (taskId: number, currentStatus: string) => {
+    const nextStatus = currentStatus === 'Completed' ? 'Pending' : 'Completed';
+    try {
+      await api.patch(`/api/tasks/${taskId}`, { status: nextStatus }, token!);
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: nextStatus } : t));
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const handleSafetySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,11 +145,13 @@ export default function SiteDetail() {
 
   const tabs = [
     { id: 'summary', name: 'Summary', icon: FileText },
+    { id: 'tasks', name: `Downstream Tasks (${tasks.length})`, icon: ListTodo },
     { id: 'map', name: 'Map View', icon: MapPin },
     { id: 'checklist', name: 'Checklist', icon: CheckCircle2 },
     { id: 'history', name: 'Stage History', icon: History },
     { id: 'materials', name: 'Materials', icon: Package },
     { id: 'safety', name: 'Safety', icon: Shield },
+    { id: 'audit', name: 'Audit Trail', icon: Activity },
     { id: 'ai', name: 'AI Issues', icon: BrainCircuit },
   ];
 
@@ -144,12 +165,12 @@ export default function SiteDetail() {
           <ArrowLeft className="w-6 h-6 text-zinc-600" />
         </button>
         <div className="flex-1">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold text-zinc-900">{site.name}</h1>
             {site.pending_stage_approval && (
-              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold uppercase tracking-wider border border-amber-200">
-                <Clock className="w-3 h-3" />
-                Stage Approval Pending
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold border border-amber-200 shadow-sm">
+                <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>Stage Approval Pending · <strong className="text-amber-950 font-extrabold">Requires Project Manager or Admin Approval</strong></span>
               </span>
             )}
           </div>
@@ -670,6 +691,125 @@ export default function SiteDetail() {
                         </div>
                       </div>
                     </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'tasks' && (
+              <motion.div
+                key="tasks"
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                className="space-y-6"
+              >
+                <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between border-b border-zinc-100 pb-4">
+                    <div>
+                      <h3 className="text-base font-bold text-zinc-900 flex items-center gap-2">
+                        <ListTodo className="w-5 h-5 text-emerald-600" />
+                        Downstream Operational Tasks
+                      </h3>
+                      <p className="text-xs text-zinc-500 mt-0.5">Tasks automatically generated upon stage advancement to guide supervisor and vendor execution.</p>
+                    </div>
+                    <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full border border-emerald-100">
+                      {tasks.filter(t => t.status === 'Completed').length} / {tasks.length} Completed
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {tasks.map((task) => (
+                      <div 
+                        key={task.id}
+                        className={`p-4 rounded-xl border transition-all flex items-start gap-4 ${
+                          task.status === 'Completed' 
+                            ? 'bg-zinc-50 border-zinc-200 opacity-75' 
+                            : 'bg-white border-zinc-200 hover:border-zinc-300 shadow-sm'
+                        }`}
+                      >
+                        <button
+                          onClick={() => handleToggleTaskStatus(task.id, task.status)}
+                          className={`mt-0.5 w-5 h-5 rounded-md flex items-center justify-center border transition-all ${
+                            task.status === 'Completed'
+                              ? 'bg-emerald-600 border-emerald-600 text-white'
+                              : 'border-zinc-300 hover:border-emerald-500 bg-white'
+                          }`}
+                        >
+                          {task.status === 'Completed' && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        </button>
+
+                        <div className="flex-1 space-y-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <h4 className={`text-sm font-bold ${task.status === 'Completed' ? 'line-through text-zinc-400' : 'text-zinc-900'}`}>
+                              {task.title}
+                            </h4>
+                            <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase ${
+                              task.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                            }`}>
+                              {task.status}
+                            </span>
+                          </div>
+
+                          <p className="text-xs text-zinc-600">{task.description}</p>
+
+                          <div className="flex items-center gap-4 text-[11px] text-zinc-400 pt-2">
+                            <span>Assigned To: <strong className="text-zinc-700">{task.assignee_name || 'Site Supervisor'}</strong></span>
+                            {task.due_date && <span>Due: {new Date(task.due_date).toLocaleDateString()}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {tasks.length === 0 && (
+                      <div className="text-center py-10 text-zinc-400 text-sm">
+                        No downstream tasks generated for this site yet.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'audit' && (
+              <motion.div
+                key="audit"
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                className="space-y-6"
+              >
+                <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm space-y-4">
+                  <div className="border-b border-zinc-100 pb-4">
+                    <h3 className="text-base font-bold text-zinc-900 flex items-center gap-2">
+                      <Activity className="w-5 h-5 text-emerald-600" />
+                      Site Audit & State Transitions Log
+                    </h3>
+                    <p className="text-xs text-zinc-500 mt-0.5">Comprehensive chronological audit trail for all stage changes and workflow actions on {site.name}.</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    {siteLogs.map((log) => (
+                      <div key={log.id} className="p-4 rounded-xl border border-zinc-100 bg-zinc-50/60 flex items-start gap-3">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 mt-2 shrink-0" />
+                        <div className="flex-1 space-y-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-bold text-xs text-zinc-900">{log.action}</span>
+                            <span className="text-[10px] text-zinc-400 font-mono">{new Date(log.timestamp).toLocaleString()}</span>
+                          </div>
+                          <p className="text-xs text-zinc-600">{log.details}</p>
+                          <div className="text-[10px] text-zinc-400 font-medium">
+                            Actor: <strong className="text-zinc-700">{log.user_name}</strong> ({log.user_role})
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {siteLogs.length === 0 && (
+                      <div className="text-center py-10 text-zinc-400 text-sm">
+                        No state transition logs for this site.
+                      </div>
+                    )}
                   </div>
                 </div>
               </motion.div>

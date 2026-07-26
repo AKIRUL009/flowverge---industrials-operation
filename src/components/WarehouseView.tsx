@@ -288,6 +288,7 @@ export default function WarehouseView() {
                     <GeotagCamera 
                       onCapture={handlePhotoCapture}
                       onClose={() => setShowCamera(false)}
+                      userName={user?.full_name}
                     />
                   )}
 
