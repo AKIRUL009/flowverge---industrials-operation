@@ -19,7 +19,11 @@ import {
   Loader2,
   Shield,
   Plus,
-  MapPin
+  MapPin,
+  Navigation,
+  ExternalLink,
+  Compass,
+  Copy
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -310,9 +314,52 @@ export default function SiteDetail() {
                 exit={{ opacity: 0, x: -10 }}
                 className="space-y-6"
               >
-                <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm">
-                  <h3 className="text-sm font-bold text-zinc-900 mb-4 uppercase tracking-wider">Site Map View</h3>
-                  <div className="w-full h-[500px] rounded-2xl overflow-hidden border border-zinc-200">
+                <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-zinc-100">
+                    <div>
+                      <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-emerald-600" />
+                        Site Map & Directions
+                      </h3>
+                      <p className="text-xs text-zinc-500 mt-1">
+                        {site.location} {site.latitude && site.longitude ? `(${site.latitude.toFixed(4)}, ${site.longitude.toFixed(4)})` : ''}
+                      </p>
+                    </div>
+
+                    {site.latitude && site.longitude && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&destination=${site.latitude},${site.longitude}&travelmode=driving`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm"
+                        >
+                          <Navigation className="w-3.5 h-3.5" />
+                          Directions (Driving)
+                        </a>
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&destination=${site.latitude},${site.longitude}&travelmode=walking`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded-xl text-xs font-semibold transition-colors"
+                        >
+                          <Compass className="w-3.5 h-3.5 text-zinc-600" />
+                          Walking
+                        </a>
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${site.latitude},${site.longitude}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-800 rounded-xl text-xs font-semibold transition-colors"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 text-zinc-600" />
+                          Google Maps
+                        </a>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="w-full h-[500px] rounded-2xl overflow-hidden border border-zinc-200 relative">
                     {site.latitude && site.longitude ? (
                       <MapContainer center={[site.latitude, site.longitude]} zoom={15} scrollWheelZoom={false} className="h-full w-full">
                         <TileLayer
@@ -320,15 +367,28 @@ export default function SiteDetail() {
                           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                         />
                         <Marker position={[site.latitude, site.longitude]}>
-                          <Popup>
-                            <strong>{site.name}</strong><br />
-                            {site.location}
+                          <Popup className="custom-map-popup">
+                            <div className="p-1 max-w-xs space-y-2">
+                              <div className="font-bold text-sm text-zinc-900">{site.name}</div>
+                              <div className="text-xs text-zinc-600">{site.location}</div>
+                              <div className="pt-2 border-t border-zinc-100 flex items-center gap-2">
+                                <a
+                                  href={`https://www.google.com/maps/dir/?api=1&destination=${site.latitude},${site.longitude}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 hover:text-emerald-700"
+                                >
+                                  <Navigation className="w-3 h-3" /> Get Directions
+                                </a>
+                              </div>
+                            </div>
                           </Popup>
                         </Marker>
                       </MapContainer>
                     ) : (
-                      <div className="flex items-center justify-center h-full bg-zinc-50 text-zinc-500">
-                        No coordinates available for this site.
+                      <div className="flex flex-col items-center justify-center h-full bg-zinc-50 text-zinc-500 space-y-2">
+                        <MapPin className="w-8 h-8 text-zinc-300" />
+                        <p className="text-sm font-medium">No coordinates available for this site.</p>
                       </div>
                     )}
                   </div>

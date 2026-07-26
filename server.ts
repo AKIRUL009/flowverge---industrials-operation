@@ -13,7 +13,7 @@ const __filename = path.join(process.cwd(), 'server.ts');
 const __dirname = process.cwd();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'flowverge-dev-secret';
 
 if (JWT_SECRET === 'flowverge-dev-secret') {

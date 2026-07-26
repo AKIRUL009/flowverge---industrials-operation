@@ -475,7 +475,7 @@ export default function ReportsView() {
                 </div>
                 <div>
                   <h3 className="text-xl font-bold tracking-tight">AI Weekly Summary</h3>
-                  <p className="text-white/50 text-xs uppercase font-bold tracking-widest">Powered by Gemini 2.0</p>
+                  <p className="text-white/50 text-xs uppercase font-bold tracking-widest">Powered by Gemini 3.6</p>
                 </div>
               </div>
               <button 

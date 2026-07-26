@@ -204,7 +204,7 @@ export default function AIHelp() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full uppercase tracking-wider">
-              Gemini 3.0 Active
+              Gemini 3.6 Active
             </span>
           </div>
         </div>

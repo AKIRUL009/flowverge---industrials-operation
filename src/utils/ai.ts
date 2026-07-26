@@ -18,7 +18,12 @@ export async function getAIInstance(token: string) {
     const processKey = typeof process !== 'undefined' && process.env ? process.env.GEMINI_API_KEY : undefined;
     
     const apiKey = customKey || viteKey || processKey;
-    const model = customModel || 'gemini-2.5-flash';
+    
+    // Normalize model name to valid @google/genai alias
+    let model = customModel || 'gemini-3.6-flash';
+    if (!model || model.includes('2.5') || model.includes('2.0') || model.includes('1.5') || model.includes('preview')) {
+      model = 'gemini-3.6-flash';
+    }
     
     if (!apiKey) {
        console.error("Gemini API key is missing. Ensure VITE_GEMINI_API_KEY is set in your Netlify environment variables, or configured in the app's Admin Settings.");
