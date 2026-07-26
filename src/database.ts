@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 
-export const db = new Database('flowverge.db');
+export const db = new Database(process.env.DATABASE_PATH || 'flowverge.db');
 
 export function initializeDatabase() {
   db.exec(`

@@ -18,9 +18,23 @@ import {
   X,
   Loader2,
   Shield,
-  Plus
+  Plus,
+  MapPin
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+import iconUrl from 'leaflet/dist/images/marker-icon.png';
+import iconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png';
+import shadowUrl from 'leaflet/dist/images/marker-shadow.png';
+
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: iconRetinaUrl,
+  iconUrl: iconUrl,
+  shadowUrl: shadowUrl,
+});
 
 export default function SiteDetail() {
   const { id } = useParams();
@@ -108,6 +122,7 @@ export default function SiteDetail() {
 
   const tabs = [
     { id: 'summary', name: 'Summary', icon: FileText },
+    { id: 'map', name: 'Map View', icon: MapPin },
     { id: 'checklist', name: 'Checklist', icon: CheckCircle2 },
     { id: 'history', name: 'Stage History', icon: History },
     { id: 'materials', name: 'Materials', icon: Package },
@@ -282,6 +297,40 @@ export default function SiteDetail() {
                         <ChevronRight className="w-4 h-4" />
                       </button>
                     </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {activeTab === 'map' && (
+              <motion.div
+                key="map"
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                className="space-y-6"
+              >
+                <div className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm">
+                  <h3 className="text-sm font-bold text-zinc-900 mb-4 uppercase tracking-wider">Site Map View</h3>
+                  <div className="w-full h-[500px] rounded-2xl overflow-hidden border border-zinc-200">
+                    {site.latitude && site.longitude ? (
+                      <MapContainer center={[site.latitude, site.longitude]} zoom={15} scrollWheelZoom={false} className="h-full w-full">
+                        <TileLayer
+                          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        />
+                        <Marker position={[site.latitude, site.longitude]}>
+                          <Popup>
+                            <strong>{site.name}</strong><br />
+                            {site.location}
+                          </Popup>
+                        </Marker>
+                      </MapContainer>
+                    ) : (
+                      <div className="flex items-center justify-center h-full bg-zinc-50 text-zinc-500">
+                        No coordinates available for this site.
+                      </div>
+                    )}
                   </div>
                 </div>
               </motion.div>
