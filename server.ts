@@ -497,20 +497,104 @@ app.post('/api/notifications/mark-all-read/:userId', authenticate, (req, res) =>
 // --- ADMIN ROUTES ---
 app.get('/api/admin/users', authenticate, (req, res) => {
   const users = db.prepare(`
-    SELECT u.*, r.name as role, r.name as role_name
+    SELECT u.id, u.full_name, u.email, u.phone, u.status, u.language_preference, u.created_at, u.role_id,
+           r.name as role, r.name as role_name
     FROM users u 
     JOIN roles r ON u.role_id = r.id
   `).all();
   res.json(users);
 });
 
-app.post('/api/admin/users', authenticate, (req, res) => {
-  const { full_name, email, password, role_id, phone } = req.body;
+app.post('/api/admin/users', authenticate, (req: any, res) => {
+  const { full_name, email, password, role_id, phone, status } = req.body;
+  if (!full_name || !email || !password || !role_id) {
+    return res.status(400).json({ error: 'Full name, email, password, and role are required.' });
+  }
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  if (existing) {
+    return res.status(400).json({ error: 'A user with this email already exists.' });
+  }
   const salt = bcrypt.genSaltSync(10);
   const hash = bcrypt.hashSync(password, salt);
-  db.prepare('INSERT INTO users (full_name, email, password_hash, role_id, phone) VALUES (?, ?, ?, ?, ?)')
-    .run(full_name, email, hash, role_id, phone);
+  const result = db.prepare('INSERT INTO users (full_name, email, password_hash, role_id, phone, status) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(full_name, email, hash, role_id, phone || '', status || 'Active');
+  
+  logAction(req.user.id, 'Create User', `Created user ${full_name} (${email})`, null);
+  res.json({ id: result.lastInsertRowid, success: true });
+});
+
+app.put('/api/admin/users/:id', authenticate, (req: any, res) => {
+  const { full_name, email, password, role_id, phone, status } = req.body;
+  const userId = req.params.id;
+  
+  if (!full_name || !email || !role_id) {
+    return res.status(400).json({ error: 'Full name, email, and role are required.' });
+  }
+
+  const existing = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(email, userId);
+  if (existing) {
+    return res.status(400).json({ error: 'Another user with this email already exists.' });
+  }
+
+  if (password && password.trim().length > 0) {
+    const salt = bcrypt.genSaltSync(10);
+    const hash = bcrypt.hashSync(password, salt);
+    db.prepare('UPDATE users SET full_name = ?, email = ?, password_hash = ?, role_id = ?, phone = ?, status = ? WHERE id = ?')
+      .run(full_name, email, hash, role_id, phone || '', status || 'Active', userId);
+  } else {
+    db.prepare('UPDATE users SET full_name = ?, email = ?, role_id = ?, phone = ?, status = ? WHERE id = ?')
+      .run(full_name, email, role_id, phone || '', status || 'Active', userId);
+  }
+
+  logAction(req.user.id, 'Update User', `Updated user ${full_name} (ID ${userId})`, null);
   res.json({ success: true });
+});
+
+app.delete('/api/admin/users/:id', authenticate, (req: any, res) => {
+  const targetUserId = Number(req.params.id);
+  if (req.user.id === targetUserId) {
+    return res.status(400).json({ error: 'You cannot delete your own logged-in account.' });
+  }
+
+  db.prepare('UPDATE sites SET supervisor_id = NULL WHERE supervisor_id = ?').run(targetUserId);
+  db.prepare('UPDATE sites SET vendor_id = NULL WHERE vendor_id = ?').run(targetUserId);
+
+  db.prepare('DELETE FROM users WHERE id = ?').run(targetUserId);
+  logAction(req.user.id, 'Delete User', `Deleted user ID ${targetUserId}`, null);
+  res.json({ success: true });
+});
+
+app.get('/api/admin/users/:id/details', authenticate, (req: any, res) => {
+  const userId = req.params.id;
+  const user = db.prepare(`
+    SELECT u.id, u.full_name, u.email, u.phone, u.status, u.language_preference, u.created_at,
+           r.id as role_id, r.name as role_name, r.description as role_description
+    FROM users u
+    JOIN roles r ON u.role_id = r.id
+    WHERE u.id = ?
+  `).get(userId);
+
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const assignedSites = db.prepare(`
+    SELECT id, site_custom_id, name, location, stage_started_at, status
+    FROM sites
+    WHERE supervisor_id = ? OR vendor_id = ?
+  `).all(userId, userId);
+
+  const recentLogs = db.prepare(`
+    SELECT l.*, s.name as site_name
+    FROM logs l
+    LEFT JOIN sites s ON l.site_id = s.id
+    WHERE l.user_id = ?
+    ORDER BY l.timestamp DESC LIMIT 15
+  `).all(userId);
+
+  res.json({
+    user,
+    assignedSites,
+    recentLogs
+  });
 });
 
 app.get('/api/admin/roles', authenticate, (req, res) => {
