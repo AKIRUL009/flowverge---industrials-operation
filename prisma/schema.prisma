@@ -1,0 +1,119 @@
+// Prisma schema definition for FlowVerge Solar Site Operations Management
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  PROJECT_MANAGER
+  SITE_SUPERVISOR
+  VENDOR
+  SAFETY_OFFICER
+  WAREHOUSE_MANAGER
+  ADMIN
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  BLOCKED
+}
+
+enum SiteStatus {
+  ON_TIME
+  DELAYED
+  COMPLETED
+  CRITICAL
+}
+
+model User {
+  id                 Int         @id @default(autoincrement())
+  uid                String?     @unique
+  fullName           String?     @map("full_name")
+  email              String      @unique
+  phone              String?
+  role               Role        @default(SITE_SUPERVISOR)
+  status             String      @default("Active")
+  languagePreference String      @default("English") @map("language_preference")
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  supervisedSites       Site[]      @relation("SiteSupervisor")
+  assignedTasks         Task[]      @relation("TaskAssignedTo")
+  inventoryTransactions Inventory[] @relation("InventoryLoggedBy")
+
+  @@map("users")
+}
+
+model Site {
+  id           Int        @id @default(autoincrement())
+  projectId    String?    @map("project_id")
+  siteCustomId String?    @unique @map("site_custom_id")
+  name         String
+  district     String?
+  client       String?
+  clientSiteId String?    @map("client_site_id")
+  location     String?
+  latitude     Float?
+  longitude    Float?
+  status       SiteStatus @default(ON_TIME)
+  currentStage String     @default("Site Selection & Survey") @map("current_stage")
+
+  supervisorId Int?  @map("supervisor_id")
+  supervisor   User? @relation("SiteSupervisor", fields: [supervisorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  tasks          Task[]
+  inventoryItems Inventory[]
+
+  @@map("sites")
+}
+
+model Task {
+  id          Int        @id @default(autoincrement())
+  title       String
+  description String?
+  status      TaskStatus @default(PENDING)
+  dueDate     DateTime?  @map("due_date")
+
+  siteId Int  @map("site_id")
+  site   Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  assignedToId Int?  @map("assigned_to_id")
+  assignedTo   User? @relation("TaskAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("tasks")
+}
+
+model Inventory {
+  id       Int     @id @default(autoincrement())
+  name     String
+  category String?
+  unit     String  @default("Pcs")
+  quantity Float   @default(0)
+  minStock Float   @default(0) @map("min_stock")
+  remarks  String?
+
+  siteId Int?  @map("site_id")
+  site   Site? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  userId   Int?  @map("user_id")
+  loggedBy User? @relation("InventoryLoggedBy", fields: [userId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("inventory")
+}

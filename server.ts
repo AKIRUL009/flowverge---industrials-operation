@@ -6,6 +6,8 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { db, initializeDatabase } from './src/database';
 import dotenv from 'dotenv';
+import { dbService, checkCloudSqlConnection } from './src/services/dbService';
+import prismaRouter from './src/routes/prismaApi';
 
 dotenv.config();
 
@@ -127,6 +129,74 @@ app.post('/api/login', (req, res) => {
   const { password_hash, ...userWithoutPassword } = user;
   logAction(user.id, 'Login', 'User logged in successfully');
   res.json({ token, user: userWithoutPassword });
+});
+
+// --- CLOUD SQL / PRISMA ROUTES ---
+app.use('/api/prisma', prismaRouter);
+
+app.get('/api/cloudsql/diagnostic', async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const rows = await dbService.query(
+      'SELECT version() as version, current_database() as database_name, current_user as db_user, NOW() as server_time'
+    );
+    const latencyMs = Date.now() - startTime;
+    const dbInfo = rows[0] || {};
+
+    res.json({
+      success: true,
+      status: 'connected',
+      latencyMs,
+      databaseVersion: dbInfo.version || 'Unknown',
+      databaseName: dbInfo.database_name || process.env.SQL_DB_NAME || 'Unknown',
+      databaseUser: dbInfo.db_user || process.env.SQL_ADMIN_USER || 'Unknown',
+      host: process.env.SQL_HOST || 'Unknown',
+      serverTime: dbInfo.server_time || new Date().toISOString(),
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    const latencyMs = Date.now() - startTime;
+    console.error('[Cloud SQL Diagnostic Error]:', err);
+    res.status(500).json({
+      success: false,
+      status: 'disconnected',
+      latencyMs,
+      error: 'Failed to verify Cloud SQL PostgreSQL connectivity',
+      details: err.message,
+      host: process.env.SQL_HOST || 'Unknown',
+      databaseName: process.env.SQL_DB_NAME || 'Unknown',
+      timestamp: new Date().toISOString(),
+    });
+  }
+});
+
+app.get('/api/cloudsql/health', async (req, res) => {
+  try {
+    const health = await checkCloudSqlConnection();
+    res.json(health);
+  } catch (err: any) {
+    res.status(500).json({ connected: false, error: err.message });
+  }
+});
+
+app.get('/api/cloudsql/sites', async (req, res) => {
+  try {
+    const health = await checkCloudSqlConnection();
+    const sites = await dbService.sites.getAll();
+    res.json({
+      status: 'ok',
+      health,
+      count: sites.length,
+      sites,
+    });
+  } catch (err: any) {
+    console.error('[Cloud SQL API Error]:', err);
+    res.status(500).json({
+      status: 'error',
+      error: 'Failed to fetch sites from Cloud SQL PostgreSQL',
+      details: err.message,
+    });
+  }
 });
 
 // --- SITE ROUTES ---
