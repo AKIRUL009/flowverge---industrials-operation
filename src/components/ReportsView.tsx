@@ -154,7 +154,7 @@ export default function ReportsView() {
       if (err?.status === 429 || err?.message?.includes('429')) {
         alert('AI service is currently busy (rate limit reached). Please try again in a minute.');
       } else if (err?.message?.includes('Missing Gemini API Key')) {
-        alert('Gemini API Key is missing. Please add VITE_GEMINI_API_KEY in your Netlify settings, or configure it in the app Admin Settings.');
+        alert('Gemini API Key is missing. Please configure the Gemini API Key in the app Admin Settings.');
       } else {
         alert('Failed to generate AI summary. Please try again later.');
       }

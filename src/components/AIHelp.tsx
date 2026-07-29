@@ -9,7 +9,7 @@ import {
   Volume2, 
   Copy, 
   Search,
-  History,
+  History, Menu, X,
   AlertCircle,
   Loader2,
   ChevronRight,
@@ -32,6 +32,20 @@ export default function AIHelp() {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const categories = ['Safety', 'Technical', 'Material', 'Vendor', 'Weather', 'Electrical', 'Structural'];
+
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setIsSidebarOpen(true);
+      } else {
+        setIsSidebarOpen(false);
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     api.get('/api/sites', token!).then(setSites);
@@ -81,7 +95,7 @@ export default function AIHelp() {
       console.error(err);
       let errMsg = 'Error connecting to AI Brain. Please try again.';
       if (err?.message?.includes('Missing Gemini API Key')) {
-        errMsg = 'Gemini API Key is missing. Please add VITE_GEMINI_API_KEY in your Netlify settings, or configure it in the app Admin Settings.';
+        errMsg = 'Gemini API Key is missing. Please configure the Gemini API Key in the app Admin Settings.';
       }
       setMessages(prev => [...prev, { role: 'ai', content: errMsg, error: true }]);
     } finally {
@@ -97,23 +111,43 @@ export default function AIHelp() {
 
   return (
     <div className="h-[calc(100vh-8rem)] flex bg-white border border-zinc-200 rounded-3xl shadow-sm overflow-hidden relative">
-      {/* Sidebar */}
+
+      {/* Sidebar Backdrop (Mobile) */}
       <AnimatePresence>
         {isSidebarOpen && (
           <motion.div
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 320, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            className="h-full border-r border-zinc-100 bg-zinc-50/50 flex flex-col shrink-0 overflow-hidden"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => {
+              if (window.innerWidth < 768) setIsSidebarOpen(false);
+            }}
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Sidebar */}
+      <div 
+        className={`
+          absolute md:relative z-50 h-full bg-white md:bg-zinc-50/50 flex flex-col shrink-0 overflow-hidden shadow-2xl md:shadow-none transition-all duration-300 ease-in-out border-r border-zinc-100
+          ${isSidebarOpen ? 'translate-x-0 w-[280px] sm:w-[320px] opacity-100' : '-translate-x-full w-[280px] sm:w-[320px] md:w-0 md:translate-x-0 md:opacity-0 md:border-none'}
+        `}
+      >
+        <div className="p-6 space-y-6 flex-1 overflow-y-auto w-[280px] sm:w-[320px]">
+          <div className="flex justify-between items-center md:hidden mb-2">
+            <span className="font-bold text-zinc-900">Context Menu</span>
+            <button onClick={() => setIsSidebarOpen(false)} className="p-2 hover:bg-zinc-100 rounded-xl transition-all">
+              <X className="w-5 h-5 text-zinc-500" />
+            </button>
+          </div>
+          <button 
+            onClick={startNewChat}
+            className="w-full flex items-center gap-3 px-4 py-3 bg-white border border-zinc-200 rounded-2xl text-sm font-bold text-zinc-900 hover:bg-zinc-100 transition-all shadow-sm"
           >
-            <div className="p-6 space-y-6 flex-1 overflow-y-auto">
-              <button 
-                onClick={startNewChat}
-                className="w-full flex items-center gap-3 px-4 py-3 bg-white border border-zinc-200 rounded-2xl text-sm font-bold text-zinc-900 hover:bg-zinc-100 transition-all shadow-sm"
-              >
-                <Plus className="w-4 h-4" />
-                New Chat
-              </button>
+            <Plus className="w-4 h-4" />
+            New Chat
+          </button>
 
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -123,7 +157,7 @@ export default function AIHelp() {
                       <label className="block text-[9px] font-bold text-zinc-400 uppercase mb-1">Target Site</label>
                       <select 
                         value={selectedSite}
-                        onChange={(e) => setSelectedSite(e.target.value)}
+                        onChange={(e) => { setSelectedSite(e.target.value); if (window.innerWidth < 768) setIsSidebarOpen(false); }}
                         className="w-full bg-transparent text-sm font-bold text-zinc-900 focus:outline-none"
                       >
                         <option value="">Select Site...</option>
@@ -180,9 +214,7 @@ export default function AIHelp() {
                 </ul>
               </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      </div>
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0 bg-white relative">
@@ -193,7 +225,7 @@ export default function AIHelp() {
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               className="p-2 hover:bg-zinc-100 rounded-xl transition-all text-zinc-500"
             >
-              <History className="w-5 h-5" />
+              <Menu className="w-5 h-5 md:hidden" /><History className="w-5 h-5 hidden md:block" />
             </button>
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-zinc-900 rounded-lg flex items-center justify-center">
@@ -221,6 +253,16 @@ export default function AIHelp() {
                 <p className="text-zinc-500 max-w-md mx-auto text-sm leading-relaxed">
                   Select a site from the sidebar and describe any technical, safety, or material issues you're facing.
                 </p>
+                <div className="md:hidden mt-6">
+                  <button 
+                    onClick={() => setIsSidebarOpen(true)}
+                    className="bg-zinc-900 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-zinc-900/20 flex items-center gap-2"
+                  >
+                    <Menu className="w-4 h-4" />
+                    Open Context Menu
+                  </button>
+                </div>
+
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-12 w-full max-w-xl">
                   {['Check safety protocols', 'Material shortage help', 'Technical installation guide', 'Weather impact analysis'].map((suggestion) => (

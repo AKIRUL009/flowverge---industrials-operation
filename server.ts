@@ -4,10 +4,13 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { db, initializeDatabase } from './src/database';
+import { db, initializeDatabase } from './src/database.ts';
 import dotenv from 'dotenv';
-import { dbService, checkCloudSqlConnection } from './src/services/dbService';
-import prismaRouter from './src/routes/prismaApi';
+import { dbService, checkCloudSqlConnection } from './src/services/dbService.ts';
+import prismaRouter from './src/routes/prismaApi.ts';
+import { GoogleGenAI } from '@google/genai';
+import { adminAuth } from './src/lib/firebaseAdmin.ts';
+import { resolveFlowvergeUser } from './src/services/authService.ts';
 
 dotenv.config();
 
@@ -15,7 +18,7 @@ const __filename = path.join(process.cwd(), 'server.ts');
 const __dirname = process.cwd();
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'flowverge-dev-secret';
 
 if (JWT_SECRET === 'flowverge-dev-secret') {
@@ -103,12 +106,72 @@ const authenticate = (req: any, res: any, next: any) => {
     if (err.name === 'TokenExpiredError') {
       return res.status(401).json({ error: 'Token expired', code: 'TOKEN_EXPIRED' });
     }
-    console.warn('JWT verification failed:', err.message);
+    console.warn(`JWT verification failed for ${req.method} ${req.originalUrl}:`, err.message);
     res.status(401).json({ error: 'Invalid token' });
   }
 };
 
+// Middleware: Firebase Authenticate
+const firebaseAuthenticate = async (req: any, res: any, next: any) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'No token provided' });
+
+  const parts = authHeader.split(' ');
+  if (parts.length !== 2 || parts[0] !== 'Bearer') {
+    return res.status(401).json({ error: 'Invalid token format' });
+  }
+
+  const token = parts[1];
+  if (!token || token === 'null' || token === 'undefined') {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  try {
+    const decodedToken = await adminAuth.verifyIdToken(token);
+    
+    // Resolve identity against existing FLOWVERGE user base
+    const resolvedUser = resolveFlowvergeUser({
+      uid: decodedToken.uid,
+      email: decodedToken.email,
+      email_verified: decodedToken.email_verified
+    });
+
+    if (!resolvedUser) {
+      return res.status(403).json({ error: 'User not authorized in FLOWVERGE' });
+    }
+
+    if (resolvedUser.status !== 'Active') {
+      return res.status(403).json({ error: 'User account is inactive' });
+    }
+
+    // Attach both verified identity and authoritative FLOWVERGE context
+    req.firebaseUser = decodedToken;
+    req.user = resolvedUser; // Normalized context replacing legacy JWT payload
+
+    next();
+  } catch (err: any) {
+    console.warn('Firebase ID Token verification failed:', err.message);
+    res.status(401).json({ error: 'Invalid Firebase token' });
+  }
+};
+
 // --- AUTH ROUTES ---
+app.get('/api/auth/firebase/verify', firebaseAuthenticate, (req: any, res: any) => {
+  res.json({ 
+    message: 'Firebase identity verified and FLOWVERGE user resolved', 
+    firebase_uid: req.firebaseUser.uid,
+    user: {
+      id: req.user.id,
+      email: req.user.email,
+      full_name: req.user.full_name,
+      role: req.user.role,
+      role_id: req.user.role_id,
+      status: req.user.status,
+      phone_verified: req.user.phone_verified
+    }
+  });
+});
+
 app.post('/api/login', (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Missing credentials' });
@@ -332,6 +395,34 @@ app.get('/api/sites/:id/history', authenticate, (req, res) => {
 });
 
 // --- CHECKLIST ROUTES ---
+
+app.get('/api/media', authenticate, (req, res) => {
+  const media = db.prepare(`
+    SELECT
+      ca.id as answer_id,
+      ca.answer_value as photo_data,
+      ca.photo_metadata,
+      ca.remarks,
+      ci.question_text,
+      cr.submitted_at as date,
+      s.id as site_id,
+      s.name as site_name,
+      st.id as stage_id,
+      st.name as stage_name,
+      u.full_name as uploader_name
+    FROM checklist_answers ca
+    JOIN checklist_items ci ON ca.item_id = ci.id
+    JOIN checklist_responses cr ON ca.response_id = cr.id
+    JOIN checklist_templates ct ON cr.template_id = ct.id
+    JOIN sites s ON cr.site_id = s.id
+    JOIN stages st ON ct.stage_id = st.id
+    JOIN users u ON cr.filled_by = u.id
+    WHERE ci.answer_type = 'Photo' OR ca.answer_value LIKE 'data:image%'
+    ORDER BY cr.submitted_at DESC
+  `).all();
+  res.json(media);
+});
+
 app.get('/api/checklists/template/:stageId', authenticate, (req, res) => {
   const template = db.prepare('SELECT * FROM checklist_templates WHERE stage_id = ? AND is_active = 1').get(req.params.stageId);
   if (!template) return res.json(null);
@@ -857,8 +948,34 @@ app.get('/api/admin/roles', authenticate, (req, res) => {
   res.json(db.prepare('SELECT * FROM roles').all());
 });
 
-app.get('/api/admin/stages', authenticate, (req, res) => {
-  res.json(db.prepare('SELECT * FROM stages ORDER BY sequence_order ASC').all());
+app.get('/api/admin/stages', firebaseAuthenticate, checkRole(['Admin', 'Project Manager']), async (req, res) => {
+  try {
+    // --- POSTGRESQL CUTOVER ---
+    // The query has been migrated to Postgres to serve as the first operational read.
+    const stages = await dbService.stages.getStagesWithChecklistMetrics();
+    
+    // Add safe diagnostics header
+    res.setHeader('X-Flowverge-Data-Source', 'PostgreSQL');
+    res.json(stages);
+
+    // --- SQLITE ROLLBACK ---
+    // Uncomment this block and remove the Postgres block above to rollback to SQLite.
+    /*
+    const stages = db.prepare(`
+      SELECT s.*, 
+             ct.name as required_checklist_name,
+             (SELECT COUNT(*) FROM checklist_items ci WHERE ci.template_id = COALESCE(s.required_checklist_id, ct.id)) as checklist_item_count
+      FROM stages s
+      LEFT JOIN checklist_templates ct ON (s.required_checklist_id = ct.id) OR (s.required_checklist_id IS NULL AND ct.stage_id = s.id AND ct.is_active = 1)
+      GROUP BY s.id
+      ORDER BY s.sequence_order
+    `).all();
+    res.json(stages);
+    */
+  } catch (error: any) {
+    console.error('Error fetching stages from Postgres:', error);
+    res.status(500).json({ error: 'Failed to fetch stages' });
+  }
 });
 
 app.post('/api/admin/assign-site', authenticate, (req: any, res) => {
@@ -1001,12 +1118,14 @@ app.get('/api/reports/ai-weekly', authenticate, (req, res) => {
 });
 
 // Middleware: Check Role
-const checkRole = (roles: string[]) => (req: any, res: any, next: any) => {
-  if (!roles.includes(req.user.role)) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  next();
-};
+function checkRole(roles: string[]) {
+  return (req: any, res: any, next: any) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    next();
+  };
+}
 
 // --- ADMIN WORKFLOW ROUTES ---
 app.post('/api/admin/stages', authenticate, checkRole(['Admin', 'Project Manager']), (req: any, res) => {
@@ -1057,7 +1176,7 @@ app.delete('/api/admin/stages/:id', authenticate, checkRole(['Admin', 'Project M
   res.json({ success: true });
 });
 
-app.get('/api/admin/checklists', authenticate, checkRole(['Admin', 'Project Manager']), (req, res) => {
+app.get('/api/admin/checklists', firebaseAuthenticate, checkRole(['Admin', 'Project Manager']), (req, res) => {
   const templates = db.prepare(`
     SELECT ct.*, st.name as stage_name 
     FROM checklist_templates ct
@@ -1082,7 +1201,7 @@ app.put('/api/admin/checklists/:id', authenticate, checkRole(['Admin', 'Project 
   res.json({ success: true });
 });
 
-app.get('/api/admin/checklists/:id/items', authenticate, checkRole(['Admin', 'Project Manager']), (req, res) => {
+app.get('/api/admin/checklists/:id/items', firebaseAuthenticate, checkRole(['Admin', 'Project Manager']), (req, res) => {
   const items = db.prepare('SELECT * FROM checklist_items WHERE template_id = ? ORDER BY order_no').all(req.params.id);
   res.json(items);
 });
@@ -1230,6 +1349,38 @@ app.put('/api/admin/integrations/:id', authenticate, checkRole(['Admin']), (req:
   const integration = db.prepare('SELECT name FROM integrations WHERE id = ?').get(req.params.id);
   logAction(req.user.id, 'Update Integration', `Updated ${integration.name} integration settings`, null);
   res.json({ success: true });
+});
+
+// --- AI PROXY ROUTE ---
+app.post("/api/ai/generateContent", authenticate, async (req, res) => {
+  try {
+    const { model, contents } = req.body;
+    const settings = db.prepare("SELECT key, value FROM system_settings WHERE key IN (?, ?)").all("AI_API_KEY", "AI_MODEL");
+    const customKey = settings.find((s) => s.key === "AI_API_KEY")?.value;
+    const customModel = settings.find((s) => s.key === "AI_MODEL")?.value;
+
+    const apiKey = customKey || process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ error: "Missing Gemini API Key configuration. Please configure it in the app Admin Settings." });
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+    let resolvedModel = model || customModel || "gemini-3.6-flash";
+    if (!resolvedModel || resolvedModel.includes("3.6") || resolvedModel.includes("2.0") || resolvedModel.includes("preview")) {
+        resolvedModel = "gemini-3.6-flash";
+    }
+
+    const response = await ai.models.generateContent({
+      model: resolvedModel,
+      contents: contents
+    });
+
+    res.json({ text: response.text });
+  } catch (error) {
+    console.error("AI Generation Error:", error);
+    res.status(500).json({ error: "Failed to generate AI content", details: error.message });
+  }
 });
 
 // --- VITE MIDDLEWARE ---

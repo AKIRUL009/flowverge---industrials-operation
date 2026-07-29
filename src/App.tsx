@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
+import SiteMediaGallery from './components/SiteMediaGallery';
 import VendorDashboard from './components/VendorDashboard';
 import Home from './components/Home';
 import Sites from './components/Sites';
@@ -54,6 +55,7 @@ const AppRoutes = () => {
         <Route path="/workflow" element={<WorkflowManager />} />
         <Route path="/profile" element={<ProfileView />} />
         <Route path="/settings" element={<SettingsView />} />
+        <Route path="/media" element={<SiteMediaGallery />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Dashboard>

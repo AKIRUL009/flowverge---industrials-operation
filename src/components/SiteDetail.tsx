@@ -477,7 +477,7 @@ export default function SiteDetail() {
                                     resp.answer_value === 'No' ? 'bg-red-50 text-red-600 border-red-100' :
                                     'bg-zinc-50 text-zinc-600 border-zinc-100'
                                   }`}>
-                                    {resp.answer_value}
+                                    {resp.answer_value?.startsWith('data:image') ? 'Photo Uploaded' : resp.answer_value}
                                   </span>
                                 </div>
                                 {resp.remarks && (
@@ -485,9 +485,30 @@ export default function SiteDetail() {
                                     "{resp.remarks}"
                                   </p>
                                 )}
-                                {resp.photo_url && (
-                                  <div className="w-32 aspect-square rounded-xl overflow-hidden border border-zinc-200">
-                                    <img src={resp.photo_url} alt="Proof" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                {(resp.photo_url || (resp.answer_value && resp.answer_value.startsWith('data:image'))) && (
+                                  <div className="mt-2 space-y-2">
+                                    <div className="w-32 aspect-square rounded-xl overflow-hidden border border-zinc-200">
+                                      <img src={resp.photo_url || resp.answer_value} alt="Proof" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                    </div>
+                                    {resp.photo_metadata && (
+                                      <div className="bg-zinc-50 border border-zinc-100 rounded-lg p-2 text-xs font-mono text-zinc-600 space-y-1">
+                                        {(() => {
+                                          try {
+                                            const meta = typeof resp.photo_metadata === 'string' ? JSON.parse(resp.photo_metadata) : resp.photo_metadata;
+                                            return (
+                                              <>
+                                                <div>📍 {meta.latitude?.toFixed(5) || 'N/A'}°, {meta.longitude?.toFixed(5) || 'N/A'}°</div>
+                                                <div>🕒 {new Date(meta.timestamp).toLocaleString()}</div>
+                                                {meta.compassHeading && <div>🧭 {meta.compassHeading}° {meta.compassDirection}</div>}
+                                                {meta.accuracy && <div>± {Math.round(meta.accuracy)}m</div>}
+                                              </>
+                                            );
+                                          } catch (e) {
+                                            return <div>Invalid metadata</div>;
+                                          }
+                                        })()}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -837,7 +858,7 @@ export default function SiteDetail() {
                 </div>
 
                 <form onSubmit={handleSafetySubmit} className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Category</label>
                       <select 

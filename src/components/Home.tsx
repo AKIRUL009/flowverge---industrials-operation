@@ -28,7 +28,7 @@ const parseAISafe = (text: string, fallback: any) => {
 };
 
 export default function Home() {
-  const { token } = useAuth();
+  const { token, authProvider } = useAuth();
   const [stats, setStats] = useState({
     delayed: 0,
     pending: 0,
@@ -47,6 +47,10 @@ export default function Home() {
 
   useEffect(() => {
     const fetchData = async () => {
+      if (authProvider === 'firebase') {
+        setLoading(false);
+        return;
+      }
       try {
         const sitesRaw = await api.get('/api/sites', token!);
         const approvalsRaw = await api.get('/api/approvals', token!);

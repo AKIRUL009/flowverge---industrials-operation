@@ -1,0 +1,344 @@
+{
+  "roles": [
+    {
+      "id": 1,
+      "name": "Admin",
+      "description": "Admin role"
+    },
+    {
+      "id": 2,
+      "name": "Project Manager",
+      "description": "Project Manager role"
+    },
+    {
+      "id": 3,
+      "name": "Supervisor",
+      "description": "Supervisor role"
+    },
+    {
+      "id": 4,
+      "name": "Warehouse",
+      "description": "Warehouse role"
+    },
+    {
+      "id": 5,
+      "name": "Vendor",
+      "description": "Vendor role"
+    },
+    {
+      "id": 6,
+      "name": "Technician",
+      "description": "Technician role"
+    }
+  ],
+  "users": [
+    {
+      "id": 1,
+      "uid": null,
+      "full_name": "Admin User",
+      "phone": null,
+      "phone_verified": 0,
+      "email": "admin@flowverge.com",
+      "password_hash": "$2b$10$gky00ygHzGLxKk7u1juANOVHCvsyKgDgNYEp74yLUyeJdMs.C5wZq",
+      "role_id": 1,
+      "status": "Active",
+      "language_preference": "English",
+      "created_at": "2026-07-29T02:40:04.000Z"
+    },
+    {
+      "id": 2,
+      "uid": null,
+      "full_name": "PM User",
+      "phone": null,
+      "phone_verified": 0,
+      "email": "pm@flowverge.com",
+      "password_hash": "$2b$10$gky00ygHzGLxKk7u1juANOqLTtp/18AxWo3lIL8HS.I3MIBDF2jDG",
+      "role_id": 2,
+      "status": "Active",
+      "language_preference": "English",
+      "created_at": "2026-07-29T02:40:04.000Z"
+    },
+    {
+      "id": 3,
+      "uid": null,
+      "full_name": "Supervisor User",
+      "phone": null,
+      "phone_verified": 0,
+      "email": "sup@flowverge.com",
+      "password_hash": "$2b$10$gky00ygHzGLxKk7u1juANOyxuXVErgbJf12KhnjjiVqFcYSQafoC6",
+      "role_id": 3,
+      "status": "Active",
+      "language_preference": "English",
+      "created_at": "2026-07-29T02:40:04.000Z"
+    },
+    {
+      "id": 4,
+      "uid": null,
+      "full_name": "Warehouse User",
+      "phone": null,
+      "phone_verified": 0,
+      "email": "wh@flowverge.com",
+      "password_hash": "$2b$10$gky00ygHzGLxKk7u1juANOXxxp99xOKtNPK2F.URHtn46JvAKiXAC",
+      "role_id": 4,
+      "status": "Active",
+      "language_preference": "English",
+      "created_at": "2026-07-29T02:40:04.000Z"
+    },
+    {
+      "id": 5,
+      "uid": null,
+      "full_name": "Vendor User",
+      "phone": null,
+      "phone_verified": 0,
+      "email": "vendor@flowverge.com",
+      "password_hash": "$2b$10$gky00ygHzGLxKk7u1juANOY5WPkNFS7ZZIJfM8MyksA2YzDjD7lxq",
+      "role_id": 5,
+      "status": "Active",
+      "language_preference": "English",
+      "created_at": "2026-07-29T02:40:05.000Z"
+    },
+    {
+      "id": 7,
+      "uid": null,
+      "full_name": "Firebase Test PM",
+      "phone": null,
+      "phone_verified": 0,
+      "email": "akirulislam787@gmail.com",
+      "password_hash": "NO_LOGIN_FIREBASE_SSO_ONLY",
+      "role_id": 2,
+      "status": "Active",
+      "language_preference": "English",
+      "created_at": "2026-07-29T04:16:05.000Z"
+    }
+  ],
+  "stages": [
+    {
+      "id": 1,
+      "name": "Survey",
+      "sequence_order": 1,
+      "max_allowed_days": 3,
+      "working_principle": null,
+      "necessary_functions": null,
+      "assigned_role": "Site Supervisor",
+      "attendance_mode": "Free for All Users",
+      "who_assigns_work": "Project Manager",
+      "approver_role": "Project Manager",
+      "required_checklist_id": null
+    },
+    {
+      "id": 2,
+      "name": "Foundation",
+      "sequence_order": 2,
+      "max_allowed_days": 7,
+      "working_principle": null,
+      "necessary_functions": null,
+      "assigned_role": "Site Supervisor",
+      "attendance_mode": "Free for All Users",
+      "who_assigns_work": "Project Manager",
+      "approver_role": "Project Manager",
+      "required_checklist_id": null
+    },
+    {
+      "id": 3,
+      "name": "Installation",
+      "sequence_order": 3,
+      "max_allowed_days": 10,
+      "working_principle": null,
+      "necessary_functions": null,
+      "assigned_role": "Site Supervisor",
+      "attendance_mode": "Free for All Users",
+      "who_assigns_work": "Project Manager",
+      "approver_role": "Project Manager",
+      "required_checklist_id": null
+    },
+    {
+      "id": 4,
+      "name": "Inspection",
+      "sequence_order": 4,
+      "max_allowed_days": 3,
+      "working_principle": null,
+      "necessary_functions": null,
+      "assigned_role": "Site Supervisor",
+      "attendance_mode": "Free for All Users",
+      "who_assigns_work": "Project Manager",
+      "approver_role": "Project Manager",
+      "required_checklist_id": null
+    },
+    {
+      "id": 5,
+      "name": "Billing",
+      "sequence_order": 5,
+      "max_allowed_days": 2,
+      "working_principle": null,
+      "necessary_functions": null,
+      "assigned_role": "Site Supervisor",
+      "attendance_mode": "Free for All Users",
+      "who_assigns_work": "Project Manager",
+      "approver_role": "Project Manager",
+      "required_checklist_id": null
+    }
+  ],
+  "sites": [
+    {
+      "id": 1,
+      "project_id": "PRJ-DEMO-01",
+      "site_custom_id": "SITE-DEMO-01",
+      "name": "Ibrahimpura Indus",
+      "district": "Indore",
+      "client": "Hyperqom Infra",
+      "client_site_id": "C-SITE-124",
+      "location": "IN-1247746",
+      "latitude": null,
+      "longitude": null,
+      "current_stage_id": 1,
+      "supervisor_id": 3,
+      "vendor_id": 5,
+      "status": "On Time",
+      "stage_started_at": "2026-07-29T02:40:05.000Z",
+      "created_at": "2026-07-29T02:40:05.000Z"
+    }
+  ],
+  "stage_history": [],
+  "checklist_templates": [
+    {
+      "id": 1,
+      "stage_id": 1,
+      "name": "Survey Checklist",
+      "is_active": 1
+    }
+  ],
+  "checklist_items": [
+    {
+      "id": 1,
+      "template_id": 1,
+      "question_text": "Site access confirmed?",
+      "answer_type": "Yes/No",
+      "is_mandatory": 1,
+      "requires_photo": 0,
+      "order_no": 1
+    },
+    {
+      "id": 2,
+      "template_id": 1,
+      "question_text": "Soil test report attached?",
+      "answer_type": "Yes/No",
+      "is_mandatory": 1,
+      "requires_photo": 0,
+      "order_no": 2
+    },
+    {
+      "id": 3,
+      "template_id": 1,
+      "question_text": "Number of panels planned",
+      "answer_type": "Number",
+      "is_mandatory": 1,
+      "requires_photo": 0,
+      "order_no": 3
+    },
+    {
+      "id": 4,
+      "template_id": 1,
+      "question_text": "Site photo - North view",
+      "answer_type": "Photo",
+      "is_mandatory": 1,
+      "requires_photo": 0,
+      "order_no": 4
+    }
+  ],
+  "checklist_responses": [],
+  "checklist_answers": [],
+  "photos": [],
+  "warehouse_materials": [
+    {
+      "id": 1,
+      "name": "Solar Panel",
+      "category": "Modules",
+      "unit": "pcs",
+      "min_stock": 10
+    },
+    {
+      "id": 2,
+      "name": "DC Cable",
+      "category": "Electrical",
+      "unit": "meters",
+      "min_stock": 50
+    },
+    {
+      "id": 3,
+      "name": "Junction Box",
+      "category": "Electrical",
+      "unit": "pcs",
+      "min_stock": 5
+    }
+  ],
+  "warehouse_transactions": [],
+  "ai_problems": [],
+  "ai_solutions": [],
+  "approvals": [],
+  "notifications": [],
+  "logs": [
+    {
+      "id": 1,
+      "user_id": 1,
+      "action": "Login",
+      "details": "User logged in successfully",
+      "site_id": null,
+      "timestamp": "2026-07-29T02:53:18.000Z"
+    },
+    {
+      "id": 2,
+      "user_id": 1,
+      "action": "Login",
+      "details": "User logged in successfully",
+      "site_id": null,
+      "timestamp": "2026-07-29T02:54:09.000Z"
+    },
+    {
+      "id": 3,
+      "user_id": 1,
+      "action": "Login",
+      "details": "User logged in successfully",
+      "site_id": null,
+      "timestamp": "2026-07-29T03:04:19.000Z"
+    }
+  ],
+  "tasks": [],
+  "messages": [],
+  "system_settings": [],
+  "safety_logs": [],
+  "reports_ai_weekly": [],
+  "integrations": [
+    {
+      "id": 1,
+      "name": "WhatsApp",
+      "config": "{\"webhook_url\":\"\",\"api_key\":\"\"}",
+      "is_enabled": 0,
+      "description": "WhatsApp Business API for notifications",
+      "updated_at": "2026-07-29T02:40:05.000Z"
+    },
+    {
+      "id": 2,
+      "name": "Teams",
+      "config": "{\"webhook_url\":\"\"}",
+      "is_enabled": 0,
+      "description": "Microsoft Teams Webhook for alerts",
+      "updated_at": "2026-07-29T02:40:05.000Z"
+    },
+    {
+      "id": 3,
+      "name": "Google Calendar",
+      "config": "{\"client_id\":\"\",\"client_secret\":\"\"}",
+      "is_enabled": 0,
+      "description": "Calendar integration for meeting scheduling",
+      "updated_at": "2026-07-29T02:40:05.000Z"
+    },
+    {
+      "id": 4,
+      "name": "External Data",
+      "config": "{\"endpoint\":\"\",\"auth_token\":\"\"}",
+      "is_enabled": 0,
+      "description": "Generic API integration for external data syncing",
+      "updated_at": "2026-07-29T02:40:05.000Z"
+    }
+  ]
+}

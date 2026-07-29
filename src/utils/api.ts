@@ -245,3 +245,40 @@ export const api = {
     .catch(err => handleCatch(err, url, 'DELETE'))
 };
 
+// We don't import auth at the top of api.ts to avoid circular dependencies if any,
+// but we can pass token or dynamically get it, or just import it.
+import { auth } from '../lib/firebase';
+
+export const firebaseApi = {
+  get: async (url: string) => {
+    const user = auth.currentUser;
+    if (!user) throw new Error('No Firebase user session found');
+    const token = await user.getIdToken();
+    return api.get(url, token);
+  },
+  post: async (url: string, data: any) => {
+    const user = auth.currentUser;
+    if (!user) throw new Error('No Firebase user session found');
+    const token = await user.getIdToken();
+    return api.post(url, data, token);
+  },
+  put: async (url: string, data: any) => {
+    const user = auth.currentUser;
+    if (!user) throw new Error('No Firebase user session found');
+    const token = await user.getIdToken();
+    return api.put(url, data, token);
+  },
+  patch: async (url: string, data: any) => {
+    const user = auth.currentUser;
+    if (!user) throw new Error('No Firebase user session found');
+    const token = await user.getIdToken();
+    return api.patch(url, data, token);
+  },
+  delete: async (url: string) => {
+    const user = auth.currentUser;
+    if (!user) throw new Error('No Firebase user session found');
+    const token = await user.getIdToken();
+    return api.delete(url, token);
+  }
+};
+

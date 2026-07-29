@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { api } from '../utils/api';
+import { api, firebaseApi } from '../utils/api';
 import { 
   Plus, 
   Edit2, 
@@ -32,7 +32,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function WorkflowManager() {
-  const { token } = useAuth();
+  const { token, authProvider } = useAuth();
   const [stages, setStages] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'stages' | 'checklists'>('stages');
@@ -266,10 +266,18 @@ export default function WorkflowManager() {
   const fetchData = async () => {
     setLoading(true);
     try {
+      const stagesPromise = authProvider === 'firebase'
+        ? firebaseApi.get('/api/admin/stages') 
+        : api.get('/api/admin/stages', token!);
+      const templatesPromise = authProvider === 'firebase' 
+        ? firebaseApi.get('/api/admin/checklists') 
+        : api.get('/api/admin/checklists', token!);
+
       const [stagesData, templatesData] = await Promise.all([
-        api.get('/api/stages', token!),
-        api.get('/api/admin/checklists', token!)
+        stagesPromise,
+        templatesPromise
       ]);
+      
       setStages(stagesData);
       setTemplates(templatesData);
     } catch (err) {
@@ -330,7 +338,9 @@ export default function WorkflowManager() {
 
   const fetchItems = async (templateId: number) => {
     try {
-      const data = await api.get(`/api/admin/checklists/${templateId}/items`, token!);
+      const data = authProvider === 'firebase'
+        ? await firebaseApi.get(`/api/admin/checklists/${templateId}/items`)
+        : await api.get(`/api/admin/checklists/${templateId}/items`, token!);
       setItems(data);
     } catch (err) {
       console.error(err);

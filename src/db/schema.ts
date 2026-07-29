@@ -225,20 +225,6 @@ export const reportsAiWeekly = pgTable('reports_ai_weekly', {
   generatedAt: timestamp('generated_at').defaultNow(),
 });
 
-export const inventory = pgTable('inventory', {
-  id: serial('id').primaryKey(),
-  name: text('name').notNull(),
-  category: text('category'),
-  unit: text('unit').default('Pcs'),
-  quantity: real('quantity').default(0),
-  minStock: real('min_stock').default(0),
-  remarks: text('remarks'),
-  siteId: integer('site_id').references(() => sites.id),
-  userId: integer('user_id').references(() => users.id),
-  createdAt: timestamp('created_at').defaultNow(),
-  updatedAt: timestamp('updated_at').defaultNow(),
-});
-
 export const integrations = pgTable('integrations', {
   id: serial('id').primaryKey(),
   name: text('name').unique(),

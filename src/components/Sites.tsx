@@ -28,14 +28,20 @@ import 'leaflet/dist/leaflet.css';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 
-const DefaultIcon = L.icon({
-  iconUrl: markerIcon,
-  shadowUrl: markerShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41]
-});
-
-L.Marker.prototype.options.icon = DefaultIcon;
+const createStatusIcon = (isDelayed: boolean) => {
+  return L.divIcon({
+    className: 'custom-status-icon',
+    html: `
+      <div class="relative flex items-center justify-center w-8 h-8">
+        <div class="absolute inset-0 rounded-full ${isDelayed ? 'bg-red-500' : 'bg-emerald-500'} opacity-20 animate-ping"></div>
+        <div class="relative z-10 w-4 h-4 rounded-full ${isDelayed ? 'bg-red-600 border-2 border-red-200' : 'bg-emerald-600 border-2 border-emerald-200'} shadow-md"></div>
+      </div>
+    `,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -16],
+  });
+};
 
 export default function Sites() {
   const { token, user } = useAuth();
@@ -287,7 +293,7 @@ export default function Sites() {
               <p className="text-sm text-zinc-500">Initialize a new solar installation project</p>
             </div>
             <form onSubmit={handleCreateSite} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1.5">Project ID</label>
                   <input
@@ -322,7 +328,7 @@ export default function Sites() {
                   placeholder="e.g. Green Valley Solar Farm"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1.5">District</label>
                   <input
@@ -345,7 +351,7 @@ export default function Sites() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1.5">Latitude</label>
                   <input
@@ -391,7 +397,7 @@ export default function Sites() {
                   placeholder="Full Address"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1.5">Supervisor</label>
                   <select
@@ -562,7 +568,7 @@ export default function Sites() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
               {filteredSites.filter(s => s.latitude && s.longitude).map(site => (
-                <Marker key={site.id} position={[site.latitude, site.longitude]}>
+                <Marker key={site.id} position={[site.latitude, site.longitude]} icon={createStatusIcon(site.is_delayed || site.status === 'DELAYED' || site.status === 'CRITICAL')}>
                   <Popup>
                     <div className="p-2 min-w-[200px]">
                       <h3 className="font-bold text-zinc-900 mb-1">{site.name}</h3>

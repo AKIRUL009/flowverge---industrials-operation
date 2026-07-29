@@ -115,6 +115,18 @@ export const dbService = {
   // Stages Service
   stages: {
     getAll: () => db.select().from(schema.stages),
+    getStagesWithChecklistMetrics: async () => {
+      const result = await db.execute(sql`
+        SELECT s.*, 
+               ct.name as required_checklist_name,
+               (SELECT COUNT(*) FROM checklist_items ci WHERE ci.template_id = COALESCE(s.required_checklist_id, ct.id))::integer as checklist_item_count
+        FROM stages s
+        LEFT JOIN checklist_templates ct ON (s.required_checklist_id = ct.id) OR (s.required_checklist_id IS NULL AND ct.stage_id = s.id AND ct.is_active = 1)
+        GROUP BY s.id, ct.id, ct.name
+        ORDER BY s.sequence_order
+      `);
+      return result.rows;
+    }
   },
 
   // Tasks Service

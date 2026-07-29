@@ -5,7 +5,11 @@ import bcrypt from 'bcryptjs';
 export const db = new Database(process.env.DATABASE_PATH || 'flowverge.db');
 
 export function initializeDatabase() {
-  db.exec(`
+  db.pragma('journal_mode = WAL');
+  db.pragma('busy_timeout = 5000');
+
+  const initTx = db.transaction(() => {
+    db.exec(`
     CREATE TABLE IF NOT EXISTS roles (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT UNIQUE,
@@ -396,6 +400,9 @@ export function initializeDatabase() {
     insertIntegration.run('Google Calendar', 'Calendar integration for meeting scheduling', JSON.stringify({ client_id: '', client_secret: '' }), 0);
     insertIntegration.run('External Data', 'Generic API integration for external data syncing', JSON.stringify({ endpoint: '', auth_token: '' }), 0);
   }
+  });
+
+  initTx.exclusive();
 }
 
 export default db;

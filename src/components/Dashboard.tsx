@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../utils/api';
-import { 
+import { Image as ImageIcon, 
   LayoutDashboard, 
   MapPin, 
   CheckCircle2, 
@@ -29,7 +29,7 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ children }: DashboardProps) {
-  const { user, logout, token } = useAuth();
+  const { user, logout, token, authProvider } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -50,10 +50,12 @@ export default function Dashboard({ children }: DashboardProps) {
   }, []);
 
   useEffect(() => {
-    if (user) {
-      api.get(`/api/notifications/${user.id}`, token!).then(data => setNotifications(Array.isArray(data) ? data : []));
+    if (user && authProvider !== 'firebase') {
+      api.get(`/api/notifications/${user.id}`, token!)
+        .then(data => setNotifications(Array.isArray(data) ? data : []))
+        .catch(console.error);
     }
-  }, [user, token]);
+  }, [user, token, authProvider]);
 
   const navItems = [
     { name: 'Dashboard', icon: LayoutDashboard, path: '/', roles: ['Admin', 'Project Manager', 'Supervisor', 'Warehouse', 'Technician'] },
@@ -61,6 +63,7 @@ export default function Dashboard({ children }: DashboardProps) {
     { name: 'Approvals', icon: CheckCircle2, path: '/approvals', roles: ['Admin', 'Project Manager'] },
     { name: 'Warehouse', icon: Warehouse, path: '/warehouse', roles: ['Admin', 'Project Manager', 'Warehouse'] },
     { name: 'AI Brain', icon: BrainCircuit, path: '/ai-brain', roles: ['Admin', 'Project Manager', 'Supervisor'] },
+    { name: 'Site Media', icon: ImageIcon, path: '/media', roles: ['Admin', 'Project Manager'] },
     { name: 'Reports', icon: BarChart3, path: '/reports', roles: ['Admin', 'Project Manager'] },
     { name: 'Google Sheets', icon: FileSpreadsheet, path: '/sheets', roles: ['Admin', 'Project Manager', 'Supervisor', 'Warehouse'] },
     { name: 'System Admin', icon: Settings, path: '/admin', roles: ['Admin'] },
@@ -71,9 +74,12 @@ export default function Dashboard({ children }: DashboardProps) {
   ];
 
   const userRole = user?.role || (user as any)?.role_name || '';
-  const filteredNav = navItems.filter(item => 
-    item.roles.some(r => r.toLowerCase() === userRole.toLowerCase())
-  );
+  const filteredNav = navItems.filter(item => {
+    if (item.path === '/workflow' && authProvider !== 'firebase') {
+      return false; // Hide Workflow Manager from legacy users since it requires Firebase authentication
+    }
+    return item.roles.some(r => r.toLowerCase() === userRole.toLowerCase());
+  });
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] flex">

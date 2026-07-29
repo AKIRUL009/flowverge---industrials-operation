@@ -4,9 +4,7 @@ import { api } from '../utils/api';
 import { Shield, Mail, Lock, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { signInWithPopup } from 'firebase/auth';
-import { auth, googleProvider, handleFirestoreError, OperationType } from '../lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { auth, googleProvider } from '../lib/firebase';
 
 export default function Login() {
   const { login } = useAuth();
@@ -25,15 +23,8 @@ export default function Login() {
       const data = await api.post('/api/login', { email, password });
       login(data.token, data.user);
     } catch (err: any) {
-      // Fallback for Netlify static host if network fails
-      const fallbackRole = email.includes('sup') ? 'Supervisor' : email.includes('wh') ? 'Warehouse' : 'Admin';
-      login('static-demo-token-' + Date.now(), {
-        id: 1,
-        full_name: email.split('@')[0].toUpperCase() + ' User',
-        email: email || 'admin@flowverge.com',
-        role: fallbackRole,
-        phone_verified: true
-      });
+      console.error('Login Error:', err);
+      setError(err.response?.data?.error || 'Invalid email or password');
     } finally {
       setLoading(false);
     }
@@ -47,28 +38,20 @@ export default function Login() {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
       
-      // Sync user profile to Firestore
+      const idToken = await user.getIdToken();
+      
+      // Verify with backend to get authoritative FLOWVERGE user and role
       try {
-        await setDoc(doc(db, 'users', user.uid), {
-          uid: user.uid,
-          fullName: user.displayName || 'Google User',
-          email: user.email || '',
-          role: 'Project Manager',
-          createdAt: new Date().toISOString()
-        }, { merge: true });
-      } catch (fsErr) {
-        handleFirestoreError(fsErr, OperationType.WRITE, `users/${user.uid}`);
+        const res = await api.get('/api/auth/firebase/verify', idToken);
+        
+        // Backend successfully verified Firebase identity and resolved the FLOWVERGE user
+        const flowvergeUser = res.user;
+        login(idToken, flowvergeUser, 'firebase');
+        
+      } catch (backendErr: any) {
+        console.error('Backend Verification Error:', backendErr);
+        setError(backendErr.response?.data?.error || 'User not authorized in FLOWVERGE backend.');
       }
-
-      const formattedUser = {
-        id: user.uid as any,
-        full_name: user.displayName || 'Google User',
-        email: user.email || '',
-        role: 'Project Manager',
-        phone_verified: true
-      };
-
-      login(await user.getIdToken(), formattedUser);
     } catch (err: any) {
       console.error('Firebase Auth Error:', err);
       if (err.code === 'auth/unauthorized-domain' || err.message?.includes('unauthorized-domain')) {
@@ -84,16 +67,6 @@ export default function Login() {
     } finally {
       setGoogleLoading(false);
     }
-  };
-
-  const handleGoogleDemoBypass = () => {
-    login('static-google-demo-token', {
-      id: 99,
-      full_name: 'Google Demo User',
-      email: 'google.demo@flowverge.com',
-      role: 'Project Manager',
-      phone_verified: true
-    });
   };
 
   return (
@@ -122,13 +95,6 @@ export default function Login() {
                   <li>Click <strong>Authorized Domains</strong> tab</li>
                   <li>Add <strong>{window.location.hostname}</strong></li>
                 </ol>
-                <button
-                  type="button"
-                  onClick={handleGoogleDemoBypass}
-                  className="mt-3 w-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-semibold py-2 px-3 rounded-lg text-xs transition-colors border border-emerald-500/30 flex items-center justify-center gap-1.5"
-                >
-                  Continue with Google Demo Account &rarr;
-                </button>
               </div>
             )}
           </div>
